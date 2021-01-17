@@ -4,12 +4,19 @@ import numpy as np
 import re
 import time
 import argparse
+import heapq
+import os
+import pickle
+
+
+
 
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5.QtCore import QTimer
 from PyQt5 import QtCore
 
+from my_chess.shared import *
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -27,11 +34,13 @@ class MainWindow(QWidget):
         self.widgetSvg.mousePressEvent = self.onclick
         self.human_first_click=True
         self.human_move=''
+        self.database_path = args.memory
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
 
 
     def human_on_click(self,event):
+
         move = self.get_human_move(event)
         if move is None:
             return None
@@ -42,12 +51,43 @@ class MainWindow(QWidget):
             self.human_first_click = True
             self.human_move += move
             try:
-                move = chess.Move.from_uci(self.human_move)
+                move = None
+                start_position = position_to_index(self.human_move[:2])
+                if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
+                                                                chess.Piece.from_symbol('P')]:
+                    end_position = position_to_index(self.human_move[2:])
+                    if start_position in [end_position + ROW_SIZE, end_position - ROW_SIZE]:
+                        value = input()
+                        if value in ['q', 'r', 'b', 'n']:
+                            move =  chess.Move.from_uci(self.human_move + value)
+                if move is None:
+                    move = chess.Move.from_uci(self.human_move)
                 if move in self.chessboard.legal_moves:
+                    # check for pawn to last row move and prompt player for type of piece conversion wanted
                     return move
             except:
                 pass
         return None
+
+    def get_computer_move(self):
+        if self.database_path is not None:
+            try:
+                index1 = board_fen_to_hash(self.chessboard.fen()) % 10
+                index2 = board_fen_to_hash384(self.chessboard.fen()) % 10
+                with open(os.path.join(self.database_path, 'dstat{0}_{1}.pkl').format(index1, index2),'rb') as f:
+                    database = pickle.load(f)
+                    moves = database.get(self.chessboard.fen())
+                    if len(moves.keys())>0:
+                        moves = [(k, v['r']) for k,v in moves.items()]
+                        print(moves)
+                        p = np.array([m[1] for m in moves])
+                        p = np.square(p) # gives higher probabilities more preference
+                        p /= p.sum()
+                        index = np.searchsorted(p.cumsum(), np.random.rand(),side='left')
+                        return chess.Move.from_uci(moves[index][0])
+            except:
+                pass
+        return alpha_beta_move(self.chessboard)
 
     def onclick(self, event):
 
@@ -58,7 +98,7 @@ class MainWindow(QWidget):
                     if move is None:
                         return
                 else:
-                    move = alpha_beta_move(self.chessboard)
+                    move = self.get_computer_move()
                     self.human_first_click = True
                 print('white:', str(move))
             else:
@@ -67,13 +107,23 @@ class MainWindow(QWidget):
                     if move is None:
                         return
                 else:
-                    move = alpha_beta_move(self.chessboard)
+                    move = self.get_computer_move()
                     self.human_first_click = True
                 print('black:', str(move))
 
             self.chessboard.push(move)
             self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
             self.widgetSvg.load(self.chessboardSvg)
+            if self.chessboard.is_checkmate():
+                if self.chessboard.turn:
+                    print('Black Wins')
+                else:
+                    print('White Wins')
+            if self.chessboard.is_insufficient_material():
+                print('Draw - insufficient material')
+            if self.chessboard.is_stalemate():
+                print('Draw - stalemate')
+
         if event.button() == QtCore.Qt.RightButton:  # undo last move
             self.chessboard.pop()
             self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
@@ -124,6 +174,8 @@ class Node:
     counter =0
     def __init__(self, board, alpha, beta, move=None):
         Node.counter +=1
+        if Node.counter%1000==0:
+            print(Node.counter)
         self.alpha = alpha
         self.beta = beta
         self.move = move
@@ -133,18 +185,62 @@ class Node:
         self.child_nodes = []
     @staticmethod
     def reset_counter():
-        Node.counter =0
+        Node.counter = 0
 
 class MCTS_Node:
     counter =0
-    def __init__(self, board, move=None):
-        Node.counter +=1
+    def __init__(self, board, parent_node=None, move=None):
+        MCTS_Node.counter +=1
         self.won=0
         self.played=0
+        self.parent_node = parent_node
+        self.move = move
+        self.board = board.copy()
+        self.legal_moves= [m for m in self.board.legal_moves]
+        self.explored_moves = set()
+        self.child_ams_heapq = []
+        if move is not None:
+            self.board.push(self.move)
+        self.child_nodes = []
 
     @staticmethod
     def reset_counter():
-        Node.counter =0
+        MCTS_Node.counter =0
+
+    def calc_AMS(self):
+        if self.parent_node is None:
+            return 1
+        exploitation = float(self.won)/self.played
+        exploration = np.log(self.parent_node.played)/self.played
+        return exploitation + np.sqrt(2*exploration)
+
+    def add_new_child(self, move, move_index):
+        assert self.legal_moves[move_index]==move
+        node = MCTS_Node(self.board, self, move)
+        self.child_nodes.append(node)
+        self.explored_moves.add(move_index)
+        return node
+
+    def get_child_node(self):
+        '''
+        :return: a child node according to adaptive multi stage sampling
+        '''
+        NEW_NODE_CHANCE = 0.1
+        new_move = False
+        if self.child_nodes:
+            if np.random.rand()<=NEW_NODE_CHANCE:
+                new_move = True
+        else:
+            new_move = True
+        if new_move:
+            unexplored_moves =set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
+            move_index = unexplored_moves[np.random.randint(len(unexplored_moves))]
+            move = self.legal_moves[move_index]
+            child_node = self.add_new_child(move, move_index)
+        else:
+            child_node = heapq.heappop(self.child_ams_heapq)
+        return child_node
+
 
 
 
@@ -154,18 +250,41 @@ def basic_evaluation(board):
             return np.inf
         else:
             return -np.inf
-    d_white = {'P': 1, 'R': 5, 'B': 4, 'N': 3, 'Q': 9}
-    d_black = [(k.lower(), -v) for k, v in d_white.items()]
-    d = d_white
-    d.update(d_black)
-    b = re.split('\s|\n', str(board))
-    score = sum([d.get(l, 0) for l in b])
+    if board.is_insufficient_material():
+        return 0
+    if board.is_stalemate():
+        return 0
+
+
+
+    wp = len(board.pieces(chess.PAWN, chess.WHITE))
+    wr = len(board.pieces(chess.ROOK, chess.WHITE))
+    wb = len(board.pieces(chess.BISHOP, chess.WHITE))
+    wk = len(board.pieces(chess.KNIGHT, chess.WHITE))
+    wq = len(board.pieces(chess.QUEEN, chess.WHITE))
+
+    bp = len(board.pieces(chess.PAWN, chess.BLACK))
+    br = len(board.pieces(chess.ROOK, chess.BLACK))
+    bb = len(board.pieces(chess.BISHOP, chess.BLACK))
+    bk = len(board.pieces(chess.KNIGHT, chess.BLACK))
+    bq = len(board.pieces(chess.QUEEN, chess.BLACK))
+
+    material_score = (wp-bp) + (wr-br)*5 + (wb-bb)*4 + (wk-bk)*3 + (wq-bq)*9
+    score= material_score
     return score
 
 
 def alpha_beta(board, depth, node):
     if depth == 0:
-        v=basic_evaluation(node.board)
+        # if board.turn:
+        #     v = -np.inf
+        #     v = max(v, capturing_moves(board, node, 0))
+        #     node.alpha = max(node.alpha, v)
+        # else:
+        #     v = np.inf
+        #     v = min(v, capturing_moves(board, node, 0))
+        #     node.beta = min(node.alpha, v)
+        v = basic_evaluation(node.board)
         if not board.turn:
             node.alpha = v
         else:
@@ -191,19 +310,93 @@ def alpha_beta(board, depth, node):
                 break
     return v
 
+def capturing_moves(board, node, depth):
+    if depth>=4:
+        v = basic_evaluation(node.board)
+        if not board.turn:
+            node.alpha = v
+        else:
+            node.beta = v
+        return v
+    captured_move_available = False
+    if board.turn:
+        v = -np.inf
+        for move in node.board.legal_moves:
+            if board.is_capture(move):
+                captured_move_available = True
+                child_node = Node(board, node.alpha, node.beta, move=move)
+                node.child_nodes.append(child_node)
+                v = max(v, capturing_moves(child_node.board, child_node, depth+1))
+                node.alpha = max(node.alpha, v)
+                if node.alpha >= node.beta:
+                    break
+    else:
+        v = np.inf
+        for move in node.board.legal_moves:
+            if board.is_capture(move):
+                captured_move_available = True
+                child_node = Node(board, node.alpha, node.beta, move=move)
+                node.child_nodes.append(child_node)
+                v = min(v, capturing_moves(child_node.board, child_node, depth+1))
+                node.beta = min(node.beta, v)
+                if node.alpha >= node.beta:
+                    break
+    if not captured_move_available:
+        v = basic_evaluation(node.board)
+        if not board.turn:
+            node.alpha = v
+        else:
+            node.beta = v
+    return v
+
+
+
+
 
 def mcts_move(board):
     MCTS_Node.reset_counter()
+    root = MCTS_Node(board)
+
+
+
+
+def play_random_game(root_node, depth):
+    assert depth%2==0, "game must end with opponent turn"
+
+    # todo: add stop condition on win
+
+    current_depth = 0
+    node = root_node
+    game_nodes = [root_node]
+    while current_depth<depth and not node.board.is_checkmate():
+        node = node.get_child_node()
+        current_depth+=1
+
+
+
+
+
+
 
 
 
 
 def alpha_beta_move(board):
+    # import cProfile, pstats, io
+    # pr = cProfile.Profile()
+    # pr.enable()
+
+    max_depth = 4
+    # min_nodes = 15000
+    Node.reset_counter()
+    # while Node.counter<min_nodes:
     Node.reset_counter()
     root = Node(board, -np.inf, np.inf)
-    v = alpha_beta(board, 4, root)  # must be an even number to end turn in opponent's turn.
+    v = alpha_beta(board, max_depth, root)  # must be an even number to end turn in opponent's turn.
+    # max_depth+=2
+
     root.child_nodes.sort(key=lambda x: -x.beta if board.turn else x.alpha)
-    print('total nodes explored:', Node.counter)
+    print('total nodes explored:', Node.counter, v, max_depth)
     # equivalent_moves = [root.child_nodes[0]]
     # for i in range(1, len(root.child_nodes)):
     #     if board.turn:
@@ -213,6 +406,14 @@ def alpha_beta_move(board):
     #         if root.child_nodes[0].alpha == root.child_nodes[i].alpha:
     #             equivalent_moves.append(root.child_nodes[i])
     # return equivalent_moves[np.random.randint(0, len(equivalent_moves))].move
+
+    # pr.disable()
+    # s = io.StringIO()
+    # sortby = 'cumulative'
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+    # print(s.getvalue())
+
     return root.child_nodes[0].move
 
 def visualize_tree(node, depth=np.inf):
@@ -250,6 +451,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--bhuman', action='store_true')
     parser.add_argument('--whuman', action='store_true')
+    parser.add_argument('-memory', help='directory where database files are (dstat[0-9].pkl')
     args = parser.parse_args()
     app = QApplication([])
     window = MainWindow()
