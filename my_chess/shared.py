@@ -1,5 +1,6 @@
 
 from collections import namedtuple
+import chess
 
 # Constants
 ROW_SIZE = 8
@@ -12,7 +13,7 @@ def position_to_index(pos):
     :param pos: a string of 2 letters [a-h][1-8]
     :return: the index of the position in the board 0-63
     '''
-    res = (eval(pos[1]) - 1) * ROW_SIZE + ord(pos[0]) - ord('a')
+    res = chess.SQUARE_NAMES.index(pos)
     assert 0 <= res < 64
     return res
 
