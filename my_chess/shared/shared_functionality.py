@@ -10,10 +10,11 @@ StatValues = namedtuple("StatValues",["Wins", "Draws", "Losses"])
 TOTAL_QUEEN_MOVES = 56
 TOTAL_KNIGHT_MOVES =  8
 KNIGHT_MOVES = {(1, 2): 0, (1, -2): 1, (2, 1): 2, (2, -1): 3, (-2, 1): 4, (-2, -1): 5, (-1, -2): 6, (-1, 2): 7}
+PLANE_INDEX_TO_KNIGHT_MOVES= dict([(v,k) for k,v in KNIGHT_MOVES.items()])
 UNDER_PROMOTIONS=['r', 'n', 'b']
 # functions
 
-def position_to_index(pos):
+def position_to_index_1d(pos):
     '''
     :param pos: a string of 2 letters [a-h][1-8]
     :return: the index of the position in the board 0-63
@@ -23,7 +24,7 @@ def position_to_index(pos):
     return res
 
 
-def position_to_2d_indices(pos):
+def position_to_indices_2d(pos):
     '''
     :param pos: a string of 2 letters [a-h][1-8]
     :return: the 2d indices of the posiition[0-7][0-7]
@@ -32,6 +33,20 @@ def position_to_2d_indices(pos):
     assert 0 <= res[0] <= 7
     assert 0 <= res[1] <= 7
     return res
+
+def index_1d_to_position(index_1d):
+    res = chess.SQUARE_NAMES[index_1d]
+    return res
+
+
+def indices_2d_to_position(indices_2d):
+    index_1d = indices_2d_to_index_1d(indices_2d)
+    res = index_1d_to_position(index_1d)
+    return res
+
+def indices_2d_to_index_1d(indices_2d):
+    return indices_2d[0] * ROW_SIZE + indices_2d[1]
+
 
 def board_fen_to_hash(fen):
     import hashlib

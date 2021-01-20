@@ -20,7 +20,7 @@ print(first_game.headers)
 print(first_game.headers["Result"])
 
 
-def input_representation(board, p1_repetitions):
+def get_input_representation(board, p1_repetitions):
     '''
     The current player is denoted by P1 and the opponent by P2
     :param board:
@@ -80,7 +80,7 @@ def input_representation(board, p1_repetitions):
     return o
 
 
-def output_representation(moves, probabilities):
+def get_output_representation(moves, probabilities):
     '''
 
     :param board:
@@ -91,71 +91,129 @@ def output_representation(moves, probabilities):
 
     # parse move
     def parse_single_move(move):
-        start_pos_1d = position_to_index(str(move)[:2])
-        end_pos_1d = position_to_index(str(move)[2:4])
-        start_pos_2d = np.array(position_to_2d_indices(str(move)[:2]))
-        end_pos_2d = np.array(position_to_2d_indices(str(move)[2:4]))
+        start_index_1d = position_to_index_1d(str(move)[:2])
+        end_index_1d = position_to_index_1d(str(move)[2:4])
+        start_indices_2d = np.array(position_to_indices_2d(str(move)[:2]))
+        end_indices_2d = np.array(position_to_indices_2d(str(move)[2:4]))
         promotion = None
         if len(str(move)) > 4:
             promotion = str(move)[4:].lower()
-        return start_pos_1d, end_pos_1d, start_pos_2d, end_pos_2d, promotion
+        return start_index_1d, end_index_1d, start_indices_2d, end_indices_2d, promotion
 
     o = np.zeros([8, 8, 73])
 
     for i, m in enumerate(moves):
-        start_pos_1d, end_pos_1d, start_pos_2d, end_pos_2d, promotion = parse_single_move(m)
+        start_index_1d, end_index_1d, start_indices_2d, end_indices_2d, promotion = parse_single_move(m)
         p = probabilities[i]
 
-        dy = end_pos_2d[0] - start_pos_2d[0]
-        dx = end_pos_2d[1] - start_pos_2d[1]
+        dr = end_indices_2d[0] - start_indices_2d[0]
+        dc = end_indices_2d[1] - start_indices_2d[1]
 
         # the first 56 planes encode possible 'queen moves' for any piece:
         # a number of squares [1..7] in which the piece will be moved,
         # along one of eight relative compass directions {N, NE, E, SE, S, SW, W, N W }
 
         if promotion is None:
-            piece = str(b.piece_at(start_pos_1d)).lower()
+            piece = str(b.piece_at(start_index_1d)).lower()
             if piece != chess.PIECE_SYMBOLS[chess.KNIGHT]:
                 # queen moves - this include pawn moves which end in promotion to queen
-                if dx != 0 and dy != 0:
-                    assert np.abs(dx) == np.abs(dy)
-                    steps = np.abs(dx)
-                    if dx > 0 and dy > 0:
+                if dc != 0 and dr != 0:
+                    assert np.abs(dc) == np.abs(dr)
+                    steps = np.abs(dc)
+                    if dc > 0 and dr > 0:
                         direction = shared.NORTH_EAST
-                    elif dx < 0 and dy > 0:
+                    elif dc < 0 and dr > 0:
                         direction = shared.NORTH_WEST
-                    elif dx > 0 and dy < 0:
+                    elif dc > 0 and dr < 0:
                         direction = shared.SOUTH_EAST
                     else:
-                        assert dx < 0 and dy < 0
+                        assert dc < 0 and dr < 0
                         direction = shared.SOUTH_WEST
-                elif dx != 0:
-                    if dx > 0:
+                elif dc != 0:
+                    if dc > 0:
                         direction = shared.WEST
                     else:
                         direction = shared.EAST
-                    steps = np.abs(dx)
+                    steps = np.abs(dc)
                 else:
-                    assert dy != 0
-                    if dy > 0:
+                    assert dr != 0
+                    if dr > 0:
                         direction = shared.NORTH
                     else:
                         direction = shared.SOUTH
-                    steps = np.abs(dy)
+                    steps = np.abs(dr)
                 plane_index = (steps - 1) * len(shared.PLANE_TYPES) + direction
             else:
                 # knight moves
-                plane_index = TOTAL_QUEEN_MOVES + KNIGHT_MOVES[(dy, dx)]
+                plane_index = TOTAL_QUEEN_MOVES + KNIGHT_MOVES[(dr, dc)]
         else:
             # under promotions: 3 options (eat diagonally east, eat diagonally west, move up) * promotion options (
             # rock, knight, bishop)
-            pawn_move_options = dx + 1  # moves dx from range -1,2 to range 0,3
+            assert dr==1
+            pawn_move_options = dc + 1  # moves dc from range -1,2 to range 0,3
             plane_index = TOTAL_QUEEN_MOVES + TOTAL_KNIGHT_MOVES + UNDER_PROMOTIONS.index(promotion) * len(
                 UNDER_PROMOTIONS) + pawn_move_options
-        o[start_pos_2d[0], start_pos_2d[1], plane_index] = p
+        o[start_indices_2d[0], start_indices_2d[1], plane_index] = p
     return o
 
 
+def output_representation_to_moves_and_probabilities(output_representation):
+    '''
+    :param output_representation:
+
+    *Note that queen promotion moves do note have 'q' (chess.PIECE_SYMBOLS[chess.QUEEN]) but that should be inferred by
+     pawn movement + lack of under promotion
+
+    :return:
+    '''
+    o = output_representation
+    moves = []
+    probabilities = []
+    for row, column, plane_index in list(zip(*np.where(o))):
+        probabilities.append(o[row, column, plane_index])
+        start_pos = indices_2d_to_position([row, column])
+        assert plane_index >= 0
+        promotion=''
+        if plane_index < TOTAL_QUEEN_MOVES:
+            steps = plane_index // len(shared.PLANE_TYPES) + 1
+            direction = plane_index % len(shared.PLANE_TYPES)
+            if direction == shared.NORTH:
+                dc = 0
+                dr = steps
+            elif direction == shared.NORTH_EAST:
+                dc = steps
+                dr = steps
+            elif direction == shared.WEST:
+                dc = steps
+                dr = 0
+            elif direction == shared.SOUTH_WEST:
+                dc = steps
+                dr = -steps
+            elif direction == shared.SOUTH:
+                dc = 0
+                dr = -steps
+            elif direction == shared.SOUTH_EAST:
+                dc = -steps
+                dr = -steps
+            elif direction == shared.EAST:
+                dc = -steps
+                dr = 0
+            else:
+                assert direction == shared.NORTH_EAST
+                dc = -steps
+                dr = steps
+        elif plane_index < TOTAL_QUEEN_MOVES + TOTAL_KNIGHT_MOVES:
+            dr, dc = PLANE_INDEX_TO_KNIGHT_MOVES[plane_index - TOTAL_QUEEN_MOVES]
+        else:
+            assert plane_index < o.shape[2]
+            plane_index = plane_index - TOTAL_QUEEN_MOVES - TOTAL_KNIGHT_MOVES
+            dr = 1
+            promotion = UNDER_PROMOTIONS[plane_index//len(UNDER_PROMOTIONS)]
+            dc = (plane_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
+        end_pos = indices_2d_to_position([row + dr, column + dc])
+        moves.append(start_pos + end_pos + promotion)
+    return moves, probabilities
+
 if __name__ == '__main__':
     b = chess.Board()
-    d = input_representation(b)
+    d = get_input_representation(b)

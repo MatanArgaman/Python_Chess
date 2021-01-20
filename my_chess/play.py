@@ -49,10 +49,10 @@ class MainWindow(QWidget):
             self.human_move += move
             try:
                 move = None
-                start_position = position_to_index(self.human_move[:2])
+                start_position = position_to_index_1d(self.human_move[:2])
                 if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
                                                                 chess.Piece.from_symbol('P')]:
-                    end_position = position_to_index(self.human_move[2:])
+                    end_position = position_to_index_1d(self.human_move[2:])
                     if start_position in [end_position + ROW_SIZE, end_position - ROW_SIZE]:
                         value = input()
                         if value in ['q', 'r', 'b', 'n']:
