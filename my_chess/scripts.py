@@ -1,5 +1,5 @@
 import pickle
-from my_chess.shared import board_fen_to_hash, board_fen_to_hash384
+from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384
 
 
 for i in range(10):

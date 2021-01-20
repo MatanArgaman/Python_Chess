@@ -1,7 +1,8 @@
 import chess.pgn
 import numpy as np
 
-from my_chess.shared import *
+from shared.shared_functionality import *
+import shared
 
 # get a set of player games
 with open("/home/blacknight/Downloads/Kasparov.pgn") as pgn:
@@ -79,26 +80,80 @@ def input_representation(board, p1_repetitions):
     return o
 
 
-def output_representation(board, moves, probabilities):
+def output_representation(moves, probabilities):
+    '''
+
+    :param board:
+    :param moves:
+    :param probabilities: sum to 1
+    :return:
+    '''
+
     # parse move
     def parse_single_move(move):
-        start_pos = position_to_2d_indices(move.__str__()[:2])
-        end_pos = position_to_2d_indices(move.__str__()[2:4])
+        start_pos_1d = position_to_index(str(move)[:2])
+        end_pos_1d = position_to_index(str(move)[2:4])
+        start_pos_2d = np.array(position_to_2d_indices(str(move)[:2]))
+        end_pos_2d = np.array(position_to_2d_indices(str(move)[2:4]))
         promotion = None
-        if len(str(move))>4:
+        if len(str(move)) > 4:
             promotion = str(move)[4:].lower()
-        return start_pos, end_pos, promotion
+        return start_pos_1d, end_pos_1d, start_pos_2d, end_pos_2d, promotion
 
     o = np.zeros([8, 8, 73])
 
+    for i, m in enumerate(moves):
+        start_pos_1d, end_pos_1d, start_pos_2d, end_pos_2d, promotion = parse_single_move(m)
+        p = probabilities[i]
 
+        dy = end_pos_2d[0] - start_pos_2d[0]
+        dx = end_pos_2d[1] - start_pos_2d[1]
 
+        # the first 56 planes encode possible 'queen moves' for any piece:
+        # a number of squares [1..7] in which the piece will be moved,
+        # along one of eight relative compass directions {N, NE, E, SE, S, SW, W, N W }
 
-    # the first 56 planes encode possible 'queen moves' for any piece:
-    # a number of squares [1..7] in which the piece will be moved,
-    # along one of eight relative compass directions {N, N E, E, SE, S, SW, W, N W }
-
-
+        if promotion is None:
+            piece = str(b.piece_at(start_pos_1d)).lower()
+            if piece != chess.PIECE_SYMBOLS[chess.KNIGHT]:
+                # queen moves - this include pawn moves which end in promotion to queen
+                if dx != 0 and dy != 0:
+                    assert np.abs(dx) == np.abs(dy)
+                    steps = np.abs(dx)
+                    if dx > 0 and dy > 0:
+                        direction = shared.NORTH_EAST
+                    elif dx < 0 and dy > 0:
+                        direction = shared.NORTH_WEST
+                    elif dx > 0 and dy < 0:
+                        direction = shared.SOUTH_EAST
+                    else:
+                        assert dx < 0 and dy < 0
+                        direction = shared.SOUTH_WEST
+                elif dx != 0:
+                    if dx > 0:
+                        direction = shared.WEST
+                    else:
+                        direction = shared.EAST
+                    steps = np.abs(dx)
+                else:
+                    assert dy != 0
+                    if dy > 0:
+                        direction = shared.NORTH
+                    else:
+                        direction = shared.SOUTH
+                    steps = np.abs(dy)
+                plane_index = (steps - 1) * len(shared.PLANE_TYPES) + direction
+            else:
+                # knight moves
+                plane_index = TOTAL_QUEEN_MOVES + KNIGHT_MOVES[(dy, dx)]
+        else:
+            # under promotions: 3 options (eat diagonally east, eat diagonally west, move up) * promotion options (
+            # rock, knight, bishop)
+            pawn_move_options = dx + 1  # moves dx from range -1,2 to range 0,3
+            plane_index = TOTAL_QUEEN_MOVES + TOTAL_KNIGHT_MOVES + UNDER_PROMOTIONS.index(promotion) * len(
+                UNDER_PROMOTIONS) + pawn_move_options
+        o[start_pos_2d[0], start_pos_2d[1], plane_index] = p
+    return o
 
 
 if __name__ == '__main__':

@@ -1,7 +1,5 @@
-import chess
 import chess.svg
 import numpy as np
-import re
 import time
 import argparse
 import heapq
@@ -13,10 +11,9 @@ import pickle
 
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
-from PyQt5.QtCore import QTimer
 from PyQt5 import QtCore
 
-from my_chess.shared import *
+from shared.shared_functionality import *
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -72,19 +69,11 @@ class MainWindow(QWidget):
     def get_computer_move(self):
         if self.database_path is not None:
             try:
-                index1 = board_fen_to_hash(self.chessboard.fen()) % 10
-                index2 = board_fen_to_hash384(self.chessboard.fen()) % 10
-                with open(os.path.join(self.database_path, 'dstat{0}_{1}.pkl').format(index1, index2),'rb') as f:
-                    database = pickle.load(f)
-                    moves = database.get(self.chessboard.fen())
-                    if len(moves.keys())>0:
-                        moves = [(k, v['r']) for k,v in moves.items()]
-                        print(moves)
-                        p = np.array([m[1] for m in moves])
-                        p = np.square(p) # gives higher probabilities more preference
-                        p /= p.sum()
-                        index = np.searchsorted(p.cumsum(), np.random.rand(),side='left')
-                        return chess.Move.from_uci(moves[index][0])
+
+                database = get_database_from_file(self.chessboard.fen(), self.database_path)
+                moves, probabilities = get_fen_moves_and_probabilities(database, self.chessboard.fen())
+                index = np.searchsorted(probabilities.cumsum(), np.random.rand(), side='left')
+                return chess.Move.from_uci(moves[index])
             except:
                 pass
         return alpha_beta_move(self.chessboard)
