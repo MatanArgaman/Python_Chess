@@ -1,6 +1,13 @@
 import pickle
-from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384
-
+from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position
+from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
+import tqdm
+from multiprocessing import Pool
+import multiprocessing
+from predict import get_input_representation, get_output_representation
+import chess
+import numpy as np
+from scipy.sparse import save_npz, csr_matrix
 
 for i in range(10):
     with open('/home/blacknight/Downloads/stat{}.pkl'.format(i), 'rb') as f:
@@ -16,14 +23,11 @@ for i in range(10):
                 if v2['wins'] > 0.01 * wins:
                     c[index][k][k2] = {'w': v2['wins'], 'd': v2['draws'], 'l': v2['losses'],
                                        'r': float(v2['wins'] / (v2['wins'] + v2['losses']))}
-            if len(c[index][k].keys())==0:
+            if len(c[index][k].keys()) == 0:
                 del c[index][k]
     for j, d in enumerate(c):
         with open('/home/blacknight/Downloads/stat{0}_{1}.pkl'.format(i, j), 'wb') as f:
             pickle.dump(c[j], f)
-
-
-
 
 for i in range(10):
     with open('/home/blacknight/Downloads/stat0_{0}.pkl'.format(i), 'rb') as f:
@@ -58,8 +62,8 @@ for i in range(10):
                 l += c[b.fen()]['e2e4']['l']
                 print(i, j)
 
-#-5679190281720826738
-#verify2
+# -5679190281720826738
+# verify2
 w, d, l = 0, 0, 0
 for i in range(10):
     with open('/home/blacknight/Downloads/stat{0}.pkl'.format(i), 'rb') as f:
@@ -67,7 +71,6 @@ for i in range(10):
         w += c[b.fen()]['e2e4']['wins']
         d += c[b.fen()]['e2e4']['draws']
         l += c[b.fen()]['e2e4']['losses']
-
 
 # repartition such that:
 # dstat{0}_{1} indices: board_fen_to_hash % 10,board_fen_to_hash384%10
@@ -81,3 +84,45 @@ for i in range(10):
     for j in range(10):
         with open('/home/blacknight/Downloads/dstat{0}_{1}.pkl'.format(i, j), 'wb') as f:
             pickle.dump(b[j], f)
+
+
+# from scipy.sparse import save_npz
+# save_npz('/home/blacknight/Downloads/t2.npz',o2)
+
+# from scipy.sparse import load_npz
+# o4=load_npz('/home/blacknight/Downloads/t2.npz')
+# o3=o4.toarray().reshape([8,8,-1])
+# (o==o3).all()
+
+def create_input_output_representation(indices):
+    index1, index2 = indices
+    with open('/home/blacknight/Downloads/dstat{0}_{1}.pkl'.format(index1, index2), 'rb') as f:
+        d = pickle.load(f)
+    input_arr = np.zeros([8, 8, INPUT_PLANES * len(d.items())], dtype=np.float)
+    output_arr = np.zeros([8, 8, OUTPUT_PLANES * len(d.items())], dtype=np.float)
+    for i, (fen, value) in enumerate(d.items()):
+        b = chess.Board(fen)
+        moves_and_probabilities = [(k, v['r']) for k, v in value.items()]
+
+        if not b.turn: # if black's turn then mirror board and moves
+            b = b.mirror()
+            moves = np.array([position_to_mirror_position(m[0][:2]) + position_to_mirror_position(m[0][2:]) for m in moves_and_probabilities])
+        else:
+            moves = np.array([m[0] for m in moves_and_probabilities])
+        probabilities = np.array([m[1] for m in moves_and_probabilities])
+        probabilities = np.square(probabilities)  # gives higher probabilities more preference
+        probabilities /= probabilities.sum()  # normalize
+        input_arr[..., i * INPUT_PLANES:(i + 1) * INPUT_PLANES] = get_input_representation(b, 0)
+        output_arr[..., i * OUTPUT_PLANES:(i + 1) * OUTPUT_PLANES] = get_output_representation(moves, probabilities, b)
+    sparse_output_arr = csr_matrix(output_arr.reshape([8,-1]))
+    sparse_input_arr = csr_matrix(input_arr.reshape([8,-1]))
+    save_npz('/home/blacknight/Downloads/estat{0}_{1}_i.npz'.format(index1, index2), sparse_input_arr)
+    save_npz('/home/blacknight/Downloads/estat{0}_{1}_o.npz'.format(index1, index2), sparse_output_arr)
+
+indices = []
+for i in range(10):
+    for j in range(10):
+        indices.append(([i,j]))
+with Pool(multiprocessing.cpu_count()//2) as p:
+  for _ in tqdm.tqdm(p.imap(create_input_output_representation, indices), total=len(indices)):
+      pass

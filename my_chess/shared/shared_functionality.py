@@ -12,6 +12,9 @@ TOTAL_KNIGHT_MOVES =  8
 KNIGHT_MOVES = {(1, 2): 0, (1, -2): 1, (2, 1): 2, (2, -1): 3, (-2, 1): 4, (-2, -1): 5, (-1, -2): 6, (-1, 2): 7}
 PLANE_INDEX_TO_KNIGHT_MOVES= dict([(v,k) for k,v in KNIGHT_MOVES.items()])
 UNDER_PROMOTIONS=['r', 'n', 'b']
+OUTPUT_PLANES = 73
+INPUT_PLANES = 19
+
 # functions
 
 def position_to_index_1d(pos):
@@ -38,6 +41,9 @@ def index_1d_to_position(index_1d):
     res = chess.SQUARE_NAMES[index_1d]
     return res
 
+def index_1d_to_indices_2d(pos):
+    return pos // ROW_SIZE, pos % ROW_SIZE
+
 
 def indices_2d_to_position(indices_2d):
     index_1d = indices_2d_to_index_1d(indices_2d)
@@ -46,6 +52,14 @@ def indices_2d_to_position(indices_2d):
 
 def indices_2d_to_index_1d(indices_2d):
     return indices_2d[0] * ROW_SIZE + indices_2d[1]
+
+def position_to_mirror_position(pos):
+    col = pos[0]
+    row = ROW_SIZE-eval(pos[1]) + 1 # mirror row
+    promotion = pos[2:]
+    new_position = col + str(row) +  promotion
+    return new_position
+
 
 
 def board_fen_to_hash(fen):
@@ -61,14 +75,14 @@ def board_fen_to_hash384(fen):
     return int.from_bytes(m.digest(), byteorder='little')
 
 def get_fen_moves_and_probabilities(database, baord_fen):
-    moves = database.get(baord_fen)
-    if len(moves.keys()) > 0:
-        moves_and_probabilities = [(k, v['r']) for k, v in moves.items()]
-        moves = np.array([m[0] for m in moves_and_probabilities])
+    value = database.get(baord_fen)
+    if len(value.keys()) > 0:
+        moves_and_probabilities = [(k, v['r']) for k, v in value.items()]
+        value = np.array([m[0] for m in moves_and_probabilities])
         probabilities = np.array([m[1] for m in moves_and_probabilities])
         probabilities = np.square(probabilities)  # gives higher probabilities more preference
         probabilities /= probabilities.sum() # normalize
-        return moves, probabilities
+        return value, probabilities
     return None, None
 
 def get_database_from_file(board_fen, database_path):

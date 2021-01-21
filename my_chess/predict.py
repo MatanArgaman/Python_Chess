@@ -27,12 +27,10 @@ def get_input_representation(board, p1_repetitions):
     :return:
     '''
 
-    def positions_1d_to_2d(pos):
-        return pos // ROW_SIZE, pos % ROW_SIZE
 
     def binary_mask(arr, board, piece, color, mask_index, value):
-        l = np.array(list(board.pieces(piece, color)))
-        l = positions_1d_to_2d(l)
+        l = np.array(list(board.pieces(piece, color)), dtype=np.int)
+        l = index_1d_to_indices_2d(l)
         arr[..., mask_index][l] = value
 
     flipped_board = False
@@ -40,7 +38,7 @@ def get_input_representation(board, p1_repetitions):
         board = board.mirror()
         flipped_board = True
 
-    o = np.zeros([8, 8, 19])
+    o = np.zeros([8, 8, INPUT_PLANES])
     # p1 piece
     piece_list = [chess.PAWN, chess.BISHOP, chess.KNIGHT, chess.ROOK, chess.QUEEN, chess.KING]
     for i, p in enumerate(piece_list):
@@ -80,7 +78,7 @@ def get_input_representation(board, p1_repetitions):
     return o
 
 
-def get_output_representation(moves, probabilities):
+def get_output_representation(moves, probabilities, board):
     '''
 
     :param board:
@@ -100,7 +98,7 @@ def get_output_representation(moves, probabilities):
             promotion = str(move)[4:].lower()
         return start_index_1d, end_index_1d, start_indices_2d, end_indices_2d, promotion
 
-    o = np.zeros([8, 8, 73])
+    o = np.zeros([8, 8, OUTPUT_PLANES])
 
     for i, m in enumerate(moves):
         start_index_1d, end_index_1d, start_indices_2d, end_indices_2d, promotion = parse_single_move(m)
@@ -113,8 +111,8 @@ def get_output_representation(moves, probabilities):
         # a number of squares [1..7] in which the piece will be moved,
         # along one of eight relative compass directions {N, NE, E, SE, S, SW, W, N W }
 
-        if promotion is None:
-            piece = str(b.piece_at(start_index_1d)).lower()
+        if (promotion is None) or (promotion==chess.PIECE_SYMBOLS[chess.QUEEN]):
+            piece = str(board.piece_at(start_index_1d)).lower()
             if piece != chess.PIECE_SYMBOLS[chess.KNIGHT]:
                 # queen moves - this include pawn moves which end in promotion to queen
                 if dc != 0 and dr != 0:
