@@ -1,5 +1,5 @@
 import pickle
-from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position
+from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position, move_to_mirror_move
 from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
 import tqdm
 from multiprocessing import Pool
@@ -106,7 +106,7 @@ def create_input_output_representation(indices):
 
         if not b.turn: # if black's turn then mirror board and moves
             b = b.mirror()
-            moves = np.array([position_to_mirror_position(m[0][:2]) + position_to_mirror_position(m[0][2:]) for m in moves_and_probabilities])
+            moves = np.array([move_to_mirror_move(m[0]) for m in moves_and_probabilities])
         else:
             moves = np.array([m[0] for m in moves_and_probabilities])
         probabilities = np.array([m[1] for m in moves_and_probabilities])
