@@ -3,17 +3,31 @@ import chess
 import numpy as np
 import os
 import pickle
+from enum import Enum
 
 # Constants
 ROW_SIZE = 8
-StatValues = namedtuple("StatValues",["Wins", "Draws", "Losses"])
+StatValues = namedtuple("StatValues", ["Wins", "Draws", "Losses"])
 TOTAL_QUEEN_MOVES = 56
-TOTAL_KNIGHT_MOVES =  8
+TOTAL_KNIGHT_MOVES = 8
 KNIGHT_MOVES = {(1, 2): 0, (1, -2): 1, (2, 1): 2, (2, -1): 3, (-2, 1): 4, (-2, -1): 5, (-1, -2): 6, (-1, 2): 7}
-PLANE_INDEX_TO_KNIGHT_MOVES= dict([(v,k) for k,v in KNIGHT_MOVES.items()])
-UNDER_PROMOTIONS=['r', 'n', 'b']
+PLANE_INDEX_TO_KNIGHT_MOVES = dict([(v, k) for k, v in KNIGHT_MOVES.items()])
+UNDER_PROMOTIONS = ['r', 'n', 'b']
 OUTPUT_PLANES = 73
 INPUT_PLANES = 19
+PLANE_SYMBOLS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'N', 'W']
+
+
+class PlaneTypes(Enum):
+    NORTH = 0
+    NORTH_EAST = 1
+    EAST = 2
+    SOUTH_EAST = 3
+    SOUTH = 4
+    SOUTH_WEST = 5
+    WEST = 6
+    NORTH_WEST = 7
+
 
 # functions
 
@@ -37,9 +51,11 @@ def position_to_indices_2d(pos):
     assert 0 <= res[1] <= 7
     return res
 
+
 def index_1d_to_position(index_1d):
     res = chess.SQUARE_NAMES[index_1d]
     return res
+
 
 def index_1d_to_indices_2d(pos):
     return pos // ROW_SIZE, pos % ROW_SIZE
@@ -50,17 +66,20 @@ def indices_2d_to_position(indices_2d):
     res = index_1d_to_position(index_1d)
     return res
 
+
 def indices_2d_to_index_1d(indices_2d):
     return indices_2d[0] * ROW_SIZE + indices_2d[1]
 
+
 def position_to_mirror_position(pos):
     col = pos[0]
-    row = ROW_SIZE-eval(pos[1]) + 1 # mirror row
+    row = ROW_SIZE - eval(pos[1]) + 1  # mirror row
     promotion = pos[2:]
-    new_position = col + str(row) +  promotion
+    new_position = col + str(row) + promotion
     return new_position
 
-
+def move_to_mirror_move(m):
+    return position_to_mirror_position(m[:2]) + position_to_mirror_position(m[2:])
 
 def board_fen_to_hash(fen):
     import hashlib
@@ -68,11 +87,13 @@ def board_fen_to_hash(fen):
     m.update(fen.encode())
     return int.from_bytes(m.digest(), byteorder='little')
 
+
 def board_fen_to_hash384(fen):
     import hashlib
     m = hashlib.sha384()
     m.update(fen.encode())
     return int.from_bytes(m.digest(), byteorder='little')
+
 
 def get_fen_moves_and_probabilities(database, baord_fen):
     value = database.get(baord_fen)
@@ -81,9 +102,10 @@ def get_fen_moves_and_probabilities(database, baord_fen):
         value = np.array([m[0] for m in moves_and_probabilities])
         probabilities = np.array([m[1] for m in moves_and_probabilities])
         probabilities = np.square(probabilities)  # gives higher probabilities more preference
-        probabilities /= probabilities.sum() # normalize
+        probabilities /= probabilities.sum()  # normalize
         return value, probabilities
     return None, None
+
 
 def get_database_from_file(board_fen, database_path):
     index1 = board_fen_to_hash(board_fen) % 10

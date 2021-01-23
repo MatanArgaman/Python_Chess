@@ -119,28 +119,28 @@ def get_output_representation(moves, probabilities, board):
                     assert np.abs(dc) == np.abs(dr)
                     steps = np.abs(dc)
                     if dc > 0 and dr > 0:
-                        direction = shared.NORTH_EAST
+                        direction = PlaneTypes.NORTH_EAST.value
                     elif dc < 0 and dr > 0:
-                        direction = shared.NORTH_WEST
+                        direction = PlaneTypes.NORTH_WEST.value
                     elif dc > 0 and dr < 0:
-                        direction = shared.SOUTH_EAST
+                        direction = PlaneTypes.SOUTH_EAST.value
                     else:
                         assert dc < 0 and dr < 0
-                        direction = shared.SOUTH_WEST
+                        direction = PlaneTypes.SOUTH_WEST.value
                 elif dc != 0:
                     if dc > 0:
-                        direction = shared.WEST
+                        direction = PlaneTypes.WEST.value
                     else:
-                        direction = shared.EAST
+                        direction = PlaneTypes.EAST.value
                     steps = np.abs(dc)
                 else:
                     assert dr != 0
                     if dr > 0:
-                        direction = shared.NORTH
+                        direction = PlaneTypes.NORTH.value
                     else:
-                        direction = shared.SOUTH
+                        direction = PlaneTypes.SOUTH.value
                     steps = np.abs(dr)
-                plane_index = (steps - 1) * len(shared.PLANE_TYPES) + direction
+                plane_index = (steps - 1) * len(PlaneTypes) + direction
             else:
                 # knight moves
                 plane_index = TOTAL_QUEEN_MOVES + KNIGHT_MOVES[(dr, dc)]
@@ -154,6 +154,11 @@ def get_output_representation(moves, probabilities, board):
         o[start_indices_2d[0], start_indices_2d[1], plane_index] = p
     return o
 
+def sort_moves_and_probabilities(moves,probabilities):
+    order = np.argsort(probabilities)[::-1] # descending order
+    probabilities=probabilities[order]
+    moves = moves[order]
+    return moves, probabilities
 
 def output_representation_to_moves_and_probabilities(output_representation):
     '''
@@ -173,31 +178,31 @@ def output_representation_to_moves_and_probabilities(output_representation):
         assert plane_index >= 0
         promotion=''
         if plane_index < TOTAL_QUEEN_MOVES:
-            steps = plane_index // len(shared.PLANE_TYPES) + 1
-            direction = plane_index % len(shared.PLANE_TYPES)
-            if direction == shared.NORTH:
+            steps = plane_index // len(PlaneTypes) + 1
+            direction = plane_index % len(PlaneTypes)
+            if direction == PlaneTypes.NORTH.value:
                 dc = 0
                 dr = steps
-            elif direction == shared.NORTH_EAST:
+            elif direction == PlaneTypes.NORTH_EAST.value:
                 dc = steps
                 dr = steps
-            elif direction == shared.WEST:
+            elif direction == PlaneTypes.WEST.value:
                 dc = steps
                 dr = 0
-            elif direction == shared.SOUTH_WEST:
+            elif direction == PlaneTypes.SOUTH_WEST.value:
                 dc = steps
                 dr = -steps
-            elif direction == shared.SOUTH:
+            elif direction == PlaneTypes.SOUTH.value:
                 dc = 0
                 dr = -steps
-            elif direction == shared.SOUTH_EAST:
+            elif direction == PlaneTypes.SOUTH_EAST.value:
                 dc = -steps
                 dr = -steps
-            elif direction == shared.EAST:
+            elif direction == PlaneTypes.EAST.value:
                 dc = -steps
                 dr = 0
             else:
-                assert direction == shared.NORTH_EAST
+                assert direction == PlaneTypes.NORTH_WEST.value
                 dc = -steps
                 dr = steps
         elif plane_index < TOTAL_QUEEN_MOVES + TOTAL_KNIGHT_MOVES:
@@ -210,7 +215,7 @@ def output_representation_to_moves_and_probabilities(output_representation):
             dc = (plane_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
         end_pos = indices_2d_to_position([row + dr, column + dc])
         moves.append(start_pos + end_pos + promotion)
-    return moves, probabilities
+    return np.array(moves), np.array(probabilities)
 
 if __name__ == '__main__':
     b = chess.Board()
