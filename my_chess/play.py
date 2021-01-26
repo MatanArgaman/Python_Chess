@@ -85,7 +85,7 @@ class MainWindow(QWidget):
                 if self.nn_model is None:
                     from tensorflow import keras
                     self.nn_model = keras.models.load_model(self.config['train']['nn_model_path'])
-                moves = get_nn_moves(self.chessboard.copy(), self.nn_model)  # returns the best k moves
+                moves = get_nn_moves([self.chessboard.copy()], self.nn_model)[0]  # returns the best k moves
                 for m in moves:
                     if chess.Move.from_uci(m) in self.chessboard.legal_moves:
                         return chess.Move.from_uci(m)
@@ -372,28 +372,36 @@ def play_random_game(root_node, depth):
         current_depth += 1
 
 
-def get_nn_moves(board, model, k_best_moves=5):
+def get_nn_moves(board_list, model, k_best_moves=5):
     from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
         sort_moves_and_probabilities
-    board_turn = board.turn
-    if not board_turn:
-        board = board.mirror()
-    input_representation = get_input_representation(board, 0)
-    o = model.predict(input_representation[np.newaxis])[0]
-    threshold = np.sort(o.flatten())[-k_best_moves]
-    a, b, c = np.where(o >= threshold)
-    a = a[0]
-    b = b[0]
-    c = c[0]
-    o2 = np.zeros([8, 8, OUTPUT_PLANES])
-    o2[a, b, c] = o[a, b, c]
-    m, p = output_representation_to_moves_and_probabilities(o2)
-    if not m:
-        return []
-    m, p = sort_moves_and_probabilities(m, p)
-    if not board_turn:
-        m = [move_to_mirror_move(move) for move in m]
-    return m
+    input_representation = np.zeros([len(board_list), 8, 8, INPUT_PLANES])
+    for i, board in enumerate(board_list):
+        board_turn = board.turn
+        if not board_turn:
+            board = board.mirror()
+        input_representation[i] = get_input_representation(board, 0)[np.newaxis]
+    output = model.predict(input_representation)
+    res = []
+    for i in range(output.shape[0]):
+
+        o = output[i]
+        threshold = np.sort(o.flatten())[-k_best_moves]
+        a, b, c = np.where(o >= threshold)
+        a = a[0]
+        b = b[0]
+        c = c[0]
+        o2 = np.zeros([8, 8, OUTPUT_PLANES])
+        o2[a, b, c] = o[a, b, c]
+        m, p = output_representation_to_moves_and_probabilities(o2)
+        if not m:
+            res.append([])
+            continue
+        m, p = sort_moves_and_probabilities(m, p)
+        if not board_list[i].turn:
+            m = [move_to_mirror_move(move) for move in m]
+        res.append(m)
+    return res
 
 
 def alpha_beta_move(board):

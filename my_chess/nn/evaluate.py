@@ -26,25 +26,34 @@ def evaluate_nn():
             with open(os.path.join(con_data['file_path'],
                                    con_data['file_name'] + '{0}_{1}.pkl'.format(i, j)), 'rb') as f:
                 d = pickle.load(f)
-                for board_fen, v in d.items():
-                    c += 1
-                    if c % 100 == 0:
-                        score = np.array(score_list)
-                        print('score:', score.mean(), score.std())
 
-                    expert_moves, probabilities = get_fen_moves_and_probabilities(d, board_fen)
-                    nn_moves = get_nn_moves(chess.Board(board_fen), nn_model, k_best_moves=1)
-                    if nn_moves and nn_moves[0] in expert_moves:
-                        score_list.append(1)
-                    else:
-                        score_list.append(0)
+            expert_moves_list = []
+            board_fen_list = []
+            for l, (board_fen, v) in enumerate(d.items()):
+                expert_moves, probabilities = get_fen_moves_and_probabilities(d, board_fen)
+                expert_moves_list.append(expert_moves)
+                board_fen_list.append(board_fen)
 
-                    # expert_set=set(expert_moves)
-                    # nn_set=set(nn_moves)
-                    # denominator=expert_set.union(nn_set)
-                    # nominator=expert_set.intersection(nn_set)
-                    # score = len(nominator)/len(denominator)
-                    # score_list.append(score)
+                c += 1
+                if c % 10000 == 0 or l == len(d.keys()) - 1:
+                    nn_moves = get_nn_moves([chess.Board(bf) for bf in board_fen_list], nn_model, k_best_moves=1)
+                    for k in range(len(nn_moves)):
+                        if nn_moves[k] and nn_moves[k][0] in expert_moves_list[k]:
+                            score_list.append(1)
+                        else:
+                            score_list.append(0)
+
+                    score = np.array(score_list)
+                    print('score:', score.mean())
+                    expert_moves_list = []
+                    board_fen_list = []
+
+                # expert_set=set(expert_moves)
+                # nn_set=set(nn_moves)
+                # denominator=expert_set.union(nn_set)
+                # nominator=expert_set.intersection(nn_set)
+                # score = len(nominator)/len(denominator)
+                # score_list.append(score)
 
 
 if __name__ == '__main__':
