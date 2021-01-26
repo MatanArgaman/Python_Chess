@@ -1,0 +1,13 @@
+{
+ "train": {
+  "input_output_files_path": "/home/blacknight/Downloads/",
+  "input_output_files_filename": "estat",
+  "test_index1": 9,
+  "test_index2": 9,
+  "nn_model_path": "/home/blacknight/Downloads/mymodel"
+ },
+ "database": {
+  "file_path": "/home/blacknight/Downloads/",
+  "file_name": "dstat"
+ }
+}

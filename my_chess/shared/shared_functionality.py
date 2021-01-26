@@ -107,9 +107,9 @@ def get_fen_moves_and_probabilities(database, baord_fen):
     return None, None
 
 
-def get_database_from_file(board_fen, database_path):
+def get_database_from_file(board_fen, database_path, file_name):
     index1 = board_fen_to_hash(board_fen) % 10
     index2 = board_fen_to_hash384(board_fen) % 10
-    with open(os.path.join(database_path, 'dstat{0}_{1}.pkl').format(index1, index2), 'rb') as f:
+    with open(os.path.join(database_path, file_name + '{0}_{1}.pkl').format(index1, index2), 'rb') as f:
         database = pickle.load(f)
     return database

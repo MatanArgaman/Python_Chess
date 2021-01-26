@@ -5,10 +5,10 @@ import argparse
 import heapq
 import os
 import pickle
-
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
+import json
 
 from shared.shared_functionality import *
 
@@ -29,8 +29,14 @@ class MainWindow(QWidget):
         self.widgetSvg.mousePressEvent = self.onclick
         self.human_first_click = True
         self.human_move = ''
-        self.database_path = args.memory
-        self.nn_path = args.nn_path
+
+        with open(os.path.join(os.getcwd(), 'config.json'), 'r') as f:
+            self.config = json.load(f)
+
+        self.nn_model = None
+        self.use_nn = args.nn
+        self.use_database = args.database
+
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
 
@@ -65,19 +71,26 @@ class MainWindow(QWidget):
         return None
 
     def get_computer_move(self):
-        if self.database_path is not None:
+        if self.use_database:
             try:
-                database = get_database_from_file(self.chessboard.fen(), self.database_path)
+                con_db = self.config['database']
+                database = get_database_from_file(self.chessboard.fen(), con_db['file_path'], con_db['file_name'])
                 moves, probabilities = get_fen_moves_and_probabilities(database, self.chessboard.fen())
                 index = np.searchsorted(probabilities.cumsum(), np.random.rand(), side='left')
                 return chess.Move.from_uci(moves[index])
             except:
                 pass
-
-        moves = nn_moves(self.chessboard.copy(), self.database_path) # returns the best k moves
-        for m in moves:
-            if chess.Move.from_uci(m) in self.chessboard.legal_moves:
-                return chess.Move.from_uci(m)
+        if self.use_nn:
+            try:
+                if self.nn_model is None:
+                    from tensorflow import keras
+                    self.nn_model = keras.models.load_model(self.config['train']['nn_model_path'])
+                moves = get_nn_moves(self.chessboard.copy(), self.nn_model)  # returns the best k moves
+                for m in moves:
+                    if chess.Move.from_uci(m) in self.chessboard.legal_moves:
+                        return chess.Move.from_uci(m)
+            except:
+                pass
         # if no legal move was generated use alpha beta to find one.
         return alpha_beta_move(self.chessboard)
 
@@ -359,10 +372,9 @@ def play_random_game(root_node, depth):
         current_depth += 1
 
 
-def nn_moves(board, database_path, k_best_moves=5):
-    from tensorflow import keras
-    from predict import get_input_representation, output_representation_to_moves_and_probabilities, sort_moves_and_probabilities
-    model = keras.models.load_model(os.path.join(database_path, 'mymodel'))
+def get_nn_moves(board, model, k_best_moves=5):
+    from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
+        sort_moves_and_probabilities
     board_turn = board.turn
     if not board_turn:
         board = board.mirror()
@@ -376,7 +388,9 @@ def nn_moves(board, database_path, k_best_moves=5):
     o2 = np.zeros([8, 8, OUTPUT_PLANES])
     o2[a, b, c] = o[a, b, c]
     m, p = output_representation_to_moves_and_probabilities(o2)
-    m,p = sort_moves_and_probabilities(m,p)
+    if not m:
+        return []
+    m, p = sort_moves_and_probabilities(m, p)
     if not board_turn:
         m = [move_to_mirror_move(move) for move in m]
     return m
@@ -452,8 +466,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--bhuman', action='store_true')
     parser.add_argument('--whuman', action='store_true')
-    parser.add_argument('-memory', help='directory where database files are (dstat[0-9].pkl')
-    parser.add_argument('-nn-path', help='directory where neural network files are mymodel folder')
+    parser.add_argument('--database', action='store_true', help='get moves from database if available')
+    parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
     args = parser.parse_args()
     app = QApplication([])
     window = MainWindow()

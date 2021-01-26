@@ -213,7 +213,10 @@ def output_representation_to_moves_and_probabilities(output_representation):
             dr = 1
             promotion = UNDER_PROMOTIONS[plane_index//len(UNDER_PROMOTIONS)]
             dc = (plane_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
-        end_pos = indices_2d_to_position([row + dr, column + dc])
+        if 0<row+dr<ROW_SIZE and 0<column+dc<ROW_SIZE:
+            end_pos = indices_2d_to_position([row + dr, column + dc])
+        else:
+            continue # do not return illegal moves
         moves.append(start_pos + end_pos + promotion)
     return np.array(moves), np.array(probabilities)
 
