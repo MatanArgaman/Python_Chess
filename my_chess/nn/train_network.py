@@ -42,7 +42,7 @@ if __name__ == '__main__':
     model = get_model()
 
     for epoch in range(5):
-        round = 0
+        counter = 0
         for a, i in enumerate(index1_order):
             for b, j in enumerate(index2_order):
                 if i == con_train['test_index1'] and j == con_train['test_index2']:
@@ -56,8 +56,8 @@ if __name__ == '__main__':
                 del model
                 model = keras.models.load_model(con_train['nn_model_path'])
 
-                print("epoch:", epoch, "round:", round, '/', '99')
-                round += 1
+                print("epoch:", epoch, "round:", counter, '/', '99')
+                counter += 1
 
     index1_test = con_train['test_index1']
     index2_test = con_train['test_index2']
