@@ -388,13 +388,10 @@ def get_nn_moves(board_list, model, k_best_moves=5):
         o = output[i]
         threshold = np.sort(o.flatten())[-k_best_moves]
         a, b, c = np.where(o >= threshold)
-        a = a[0]
-        b = b[0]
-        c = c[0]
         o2 = np.zeros([8, 8, OUTPUT_PLANES])
         o2[a, b, c] = o[a, b, c]
         m, p = output_representation_to_moves_and_probabilities(o2)
-        if not m:
+        if m.size==0:
             res.append([])
             continue
         m, p = sort_moves_and_probabilities(m, p)

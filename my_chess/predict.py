@@ -173,7 +173,6 @@ def output_representation_to_moves_and_probabilities(output_representation):
     moves = []
     probabilities = []
     for row, column, plane_index in list(zip(*np.where(o))):
-        probabilities.append(o[row, column, plane_index])
         start_pos = indices_2d_to_position([row, column])
         assert plane_index >= 0
         promotion=''
@@ -218,6 +217,7 @@ def output_representation_to_moves_and_probabilities(output_representation):
         else:
             continue # do not return illegal moves
         moves.append(start_pos + end_pos + promotion)
+        probabilities.append(o[row, column, plane_index])
     return np.array(moves), np.array(probabilities)
 
 if __name__ == '__main__':
