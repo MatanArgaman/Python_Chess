@@ -223,8 +223,8 @@ class MCTS_Node:
         MCTS_Node.counter = 0
 
     def win_percentage(self):
-        if self.played>0:
-            return float(self.won)/self.played
+        if self.played > 0:
+            return float(self.won) / self.played
         raise Exception("No game played")
 
     def calc_AMS(self):
@@ -253,7 +253,7 @@ class MCTS_Node:
                 new_move = True
         else:
             new_move = True
-        if len(self.legal_moves) == len(self.explored_moves): # all possible moves where explored
+        if len(self.legal_moves) == len(self.explored_moves):  # all possible moves where explored
             new_move = False
         if new_move:
             unexplored_moves = set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
@@ -381,7 +381,7 @@ def is_game_over(board):
 
 
 def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
-    def get_material_reward(board):
+    def get_material_reward(board, start_turn_is_white):
         material_score = get_material_score(board)
         if material_score > 0:
             reward = 1
@@ -389,6 +389,8 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
             reward = 0
         else:
             reward = 0.5
+        if not start_turn_is_white:
+            reward = 1 - reward
         return reward
 
     MCTS_Node.reset_counter()
@@ -412,7 +414,7 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
                         if node.depth == max_depth:
                             reward = 0.5
                         else:
-                            reward = get_material_reward(board)
+                            reward = get_material_reward(node.board, board.turn)
                 else:
                     if board.is_checkmate:
                         reward = 0
@@ -420,7 +422,7 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
                         if node.depth == max_depth:
                             reward = 0.5
                         else:
-                            reward = get_material_reward(board)
+                            reward = get_material_reward(node.board, board.turn)
             else:
                 if not node.board.turn:
                     if board.is_checkmate:
@@ -429,7 +431,7 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
                         if node.depth == max_depth:
                             reward = 0.5
                         else:
-                            reward = get_material_reward(board)
+                            reward = get_material_reward(node.board, board.turn)
                 else:
                     if board.is_checkmate:
                         reward = 1
@@ -437,7 +439,7 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
                         if node.depth == max_depth:
                             reward = 0.5
                         else:
-                            reward = get_material_reward(board)
+                            reward = get_material_reward(node.board, board.turn)
 
         for node in game_nodes:
             node.played += 1
@@ -445,9 +447,8 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
             if node.parent_node:
                 heapq.heappush(node.parent_node.child_ams_heapq, (-node.calc_AMS(), id(node), node))
 
-
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
-    sorted_nodes = sorted(best_nodes, key = lambda x:x[1])
+    sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
     k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
     moves = [n[0].move for n in k_best_nodes]
     return moves
