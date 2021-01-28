@@ -22,7 +22,8 @@ class MainWindow(QWidget):
         self.widgetSvg = QSvgWidget(parent=self)
         self.widgetSvg.setGeometry(10, 10, 1080, 1080)
 
-        self.chessboard = chess.Board()
+
+        self.chessboard = chess.Board(args.board)
 
         self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
         self.widgetSvg.load(self.chessboardSvg)
@@ -467,12 +468,15 @@ def visualize_tree(node, depth=np.inf):
     dot.render('test-output/round-table.gv', view=True)
 
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--bhuman', action='store_true')
     parser.add_argument('--whuman', action='store_true')
     parser.add_argument('--database', action='store_true', help='get moves from database if available')
     parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
+    parser.add_argument('-board',  help='start from predefined board (fen), e.g: "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"')
+
     args = parser.parse_args()
     app = QApplication([])
     window = MainWindow()
