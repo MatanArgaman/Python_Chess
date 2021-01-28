@@ -22,8 +22,10 @@ class MainWindow(QWidget):
         self.widgetSvg = QSvgWidget(parent=self)
         self.widgetSvg.setGeometry(10, 10, 1080, 1080)
 
-
-        self.chessboard = chess.Board(args.board)
+        if args.board is not None:
+            self.chessboard = chess.Board(args.board)
+        else:
+            self.chessboard = chess.Board()
 
         self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
         self.widgetSvg.load(self.chessboardSvg)
@@ -37,6 +39,7 @@ class MainWindow(QWidget):
         self.nn_model = None
         self.use_nn = args.nn
         self.use_database = args.database
+        self.use_mcts = args.mcts
 
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
@@ -81,6 +84,9 @@ class MainWindow(QWidget):
                 return chess.Move.from_uci(moves[index])
             except:
                 pass
+        if self.use_mcts:
+            move = mcts_move(self.chessboard)[0]
+            return move
         if self.use_nn:
             try:
                 if self.nn_model is None:
@@ -197,34 +203,41 @@ class Node:
 class MCTS_Node:
     counter = 0
 
-    def __init__(self, board, parent_node=None, move=None):
+    def __init__(self, board, parent_node=None, move=None, depth=0):
         MCTS_Node.counter += 1
         self.won = 0
         self.played = 0
         self.parent_node = parent_node
         self.move = move
         self.board = board.copy()
-        self.legal_moves = [m for m in self.board.legal_moves]
         self.explored_moves = set()
         self.child_ams_heapq = []
+        self.depth = depth
         if move is not None:
             self.board.push(self.move)
+        self.legal_moves = [m for m in self.board.legal_moves]
         self.child_nodes = []
 
     @staticmethod
     def reset_counter():
         MCTS_Node.counter = 0
 
+    def win_percentage(self):
+        if self.played>0:
+            return float(self.won)/self.played
+        raise Exception("No game played")
+
     def calc_AMS(self):
+        assert self.played > 0
         if self.parent_node is None:
             return 1
-        exploitation = float(self.won) / self.played
+        exploitation = self.win_percentage()
         exploration = np.log(self.parent_node.played) / self.played
         return exploitation + np.sqrt(2 * exploration)
 
     def add_new_child(self, move, move_index):
         assert self.legal_moves[move_index] == move
-        node = MCTS_Node(self.board, self, move)
+        node = MCTS_Node(self.board, self, move, self.depth + 1)
         self.child_nodes.append(node)
         self.explored_moves.add(move_index)
         return node
@@ -240,27 +253,19 @@ class MCTS_Node:
                 new_move = True
         else:
             new_move = True
+        if len(self.legal_moves) == len(self.explored_moves): # all possible moves where explored
+            new_move = False
         if new_move:
             unexplored_moves = set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
-            move_index = unexplored_moves[np.random.randint(len(unexplored_moves))]
+            move_index = list(unexplored_moves)[np.random.randint(len(unexplored_moves))]
             move = self.legal_moves[move_index]
             child_node = self.add_new_child(move, move_index)
         else:
-            child_node = heapq.heappop(self.child_ams_heapq)
+            child_node = heapq.heappop(self.child_ams_heapq)[2]
         return child_node
 
 
-def basic_evaluation(board):
-    if board.is_checkmate():
-        if board.turn:
-            return np.inf
-        else:
-            return -np.inf
-    if board.is_insufficient_material():
-        return 0
-    if board.is_stalemate():
-        return 0
-
+def get_material_score(board):
     wp = len(board.pieces(chess.PAWN, chess.WHITE))
     wr = len(board.pieces(chess.ROOK, chess.WHITE))
     wb = len(board.pieces(chess.BISHOP, chess.WHITE))
@@ -274,7 +279,21 @@ def basic_evaluation(board):
     bq = len(board.pieces(chess.QUEEN, chess.BLACK))
 
     material_score = (wp - bp) + (wr - br) * 5 + (wb - bb) * 4 + (wk - bk) * 3 + (wq - bq) * 9
-    score = material_score
+    return material_score
+
+
+def basic_evaluation(board):
+    if board.is_checkmate():
+        if board.turn:
+            return np.inf
+        else:
+            return -np.inf
+    if board.is_insufficient_material():
+        return 0
+    if board.is_stalemate():
+        return 0
+
+    score = get_material_score(board)
     return score
 
 
@@ -355,22 +374,83 @@ def capturing_moves(board, node, depth):
     return v
 
 
-def mcts_move(board):
+def is_game_over(board):
+    if board.is_checkmate() or board.is_insufficient_material() or board.is_stalemate():
+        return True
+    return False
+
+
+def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
+    def get_material_reward(board):
+        material_score = get_material_score(board)
+        if material_score > 0:
+            reward = 1
+        elif material_score < 0:
+            reward = 0
+        else:
+            reward = 0.5
+        return reward
+
     MCTS_Node.reset_counter()
     root = MCTS_Node(board)
 
+    while root.played < max_games:
+        node = root
+        game_nodes = [root]
+        while (not node.board.is_game_over()) and node.depth < max_depth:
+            node = node.get_child_node()
+            game_nodes.append(node)
 
-def play_random_game(root_node, depth):
-    assert depth % 2 == 0, "game must end with opponent turn"
+        if node.board.is_insufficient_material() or node.board.is_stalemate():
+            reward = 0.5
+        else:
+            if board.turn:
+                if not node.board.turn:
+                    if board.is_checkmate:
+                        reward = 1
+                    else:
+                        if node.depth == max_depth:
+                            reward = 0.5
+                        else:
+                            reward = get_material_reward(board)
+                else:
+                    if board.is_checkmate:
+                        reward = 0
+                    else:
+                        if node.depth == max_depth:
+                            reward = 0.5
+                        else:
+                            reward = get_material_reward(board)
+            else:
+                if not node.board.turn:
+                    if board.is_checkmate:
+                        reward = 0
+                    else:
+                        if node.depth == max_depth:
+                            reward = 0.5
+                        else:
+                            reward = get_material_reward(board)
+                else:
+                    if board.is_checkmate:
+                        reward = 1
+                    else:
+                        if node.depth == max_depth:
+                            reward = 0.5
+                        else:
+                            reward = get_material_reward(board)
 
-    # todo: add stop condition on win
+        for node in game_nodes:
+            node.played += 1
+            node.won += reward
+            if node.parent_node:
+                heapq.heappush(node.parent_node.child_ams_heapq, (-node.calc_AMS(), id(node), node))
 
-    current_depth = 0
-    node = root_node
-    game_nodes = [root_node]
-    while current_depth < depth and not node.board.is_checkmate():
-        node = node.get_child_node()
-        current_depth += 1
+
+    best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
+    sorted_nodes = sorted(best_nodes, key = lambda x:x[1])
+    k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
+    moves = [n[0].move for n in k_best_nodes]
+    return moves
 
 
 def get_nn_moves(board_list, model, k_best_moves=5):
@@ -392,7 +472,7 @@ def get_nn_moves(board_list, model, k_best_moves=5):
         o2 = np.zeros([8, 8, OUTPUT_PLANES])
         o2[a, b, c] = o[a, b, c]
         m, p = output_representation_to_moves_and_probabilities(o2)
-        if m.size==0:
+        if m.size == 0:
             res.append([])
             continue
         m, p = sort_moves_and_probabilities(m, p)
@@ -468,14 +548,14 @@ def visualize_tree(node, depth=np.inf):
     dot.render('test-output/round-table.gv', view=True)
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--bhuman', action='store_true')
     parser.add_argument('--whuman', action='store_true')
     parser.add_argument('--database', action='store_true', help='get moves from database if available')
     parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
-    parser.add_argument('-board',  help='start from predefined board (fen), e.g: "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"')
+    parser.add_argument('--mcts', action='store_true', help='get moves from monte carlo tree search')
+    parser.add_argument('-board', help='start from predefined board (fen), e.g: "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"')
 
     args = parser.parse_args()
     app = QApplication([])
