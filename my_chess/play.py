@@ -9,6 +9,9 @@ from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
 import json
+import tqdm
+from multiprocessing import Pool
+import multiprocessing
 
 from shared.shared_functionality import *
 
@@ -209,6 +212,10 @@ class MCTS_Node:
         self.played = 0
         self.parent_node = parent_node
         self.move = move
+        self.capturing_move =False
+        if move is not None:
+            if board.is_capture(move):
+                self.capturing_move = True
         self.board = board.copy()
         self.explored_moves = set()
         self.child_ams_heapq = []
@@ -233,7 +240,8 @@ class MCTS_Node:
             return 1
         exploitation = self.win_percentage()
         exploration = np.log(self.parent_node.played) / self.played
-        return exploitation + np.sqrt(2 * exploration)
+        eating_heuristic = (0.5 if self.capturing_move else 0) / self.played
+        return exploitation + np.sqrt(2 * exploration + eating_heuristic)
 
     def add_new_child(self, move, move_index):
         assert self.legal_moves[move_index] == move
@@ -263,6 +271,9 @@ class MCTS_Node:
         else:
             child_node = heapq.heappop(self.child_ams_heapq)[2]
         return child_node
+
+    def update_parent_heap(self):
+        heapq.heappush(self.parent_node.child_ams_heapq, (-self.calc_AMS(), id(self), self))
 
 
 def get_material_score(board):
@@ -379,8 +390,43 @@ def is_game_over(board):
         return True
     return False
 
+def merge_trees(node1, node2):
+    node_map = dict([(n.move, n) for n in node1.child_nodes])
+    for n in node2.child_nodes:
+        if n.move in node_map:
+            node_map[n.move].played += n.played
+            node_map[n.move].won += n.won
+            merge_trees(node_map[n.move], n)
+        else:
+            move_index = node1.legal_moves.index(n.move)
+            node1.child_nodes.append(n)
+            node1.explored_moves.add(move_index)
+            n.parent_node = node1
+            n.update_parent_heap()
 
-def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
+def mcts_move(board, max_games=150, max_depth=30, k_best_moves=5):
+    process_num = multiprocessing.cpu_count() - 1
+    indices = [(board, max_games, max_depth, k_best_moves)] * (process_num)
+    first_root = None
+    with Pool(process_num) as p:
+        for root in tqdm.tqdm(p.imap(mcts_move_helper, indices), total=len(indices)):
+            if first_root is None:
+                first_root = root
+            else:
+                merge_trees(first_root, root)
+
+    root = first_root
+    best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
+    sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
+    k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
+    moves = [n[0].move for n in k_best_nodes]
+    return moves
+
+
+def mcts_move_helper(parameters):
+    board, max_games, max_depth, k_best_moves = parameters
+    start_time = time.time()  # about 24 seconds for a single processor
+
     def get_material_reward(board, start_turn_is_white):
         material_score = get_material_score(board)
         if material_score > 0:
@@ -445,13 +491,10 @@ def mcts_move(board, max_games=800, max_depth=100, k_best_moves=5):
             node.played += 1
             node.won += reward
             if node.parent_node:
-                heapq.heappush(node.parent_node.child_ams_heapq, (-node.calc_AMS(), id(node), node))
+                node.update_parent_heap()
 
-    best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
-    sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
-    k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
-    moves = [n[0].move for n in k_best_nodes]
-    return moves
+    print('total move time:', time.time() - start_time)
+    return root
 
 
 def get_nn_moves(board_list, model, k_best_moves=5):
