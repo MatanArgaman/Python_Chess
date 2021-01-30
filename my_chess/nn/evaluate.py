@@ -5,7 +5,7 @@ import time
 import chess
 import json
 from tensorflow import keras
-
+import tensorflow as tf
 from play import get_nn_moves
 from shared.shared_functionality import get_fen_moves_and_probabilities
 
@@ -57,4 +57,5 @@ def evaluate_nn():
 
 
 if __name__ == '__main__':
+    print('gpu available:', tf.test.is_gpu_available())
     evaluate_nn()
