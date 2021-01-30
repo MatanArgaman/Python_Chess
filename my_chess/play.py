@@ -213,7 +213,7 @@ class MCTS_Node:
         self.played = 0
         self.parent_node = parent_node
         self.move = move
-        self.capturing_move =False
+        self.capturing_move = False
         if move is not None:
             if board.is_capture(move):
                 self.capturing_move = True
@@ -400,6 +400,7 @@ def is_game_over(board):
         return True
     return False
 
+
 def merge_trees(node1, node2):
     node_map = dict([(n.move, n) for n in node1.child_nodes])
     for n in node2.child_nodes:
@@ -414,7 +415,8 @@ def merge_trees(node1, node2):
             n.parent_node = node1
             n.update_parent_heap()
 
-def mcts_move(board, max_games=550, max_depth=20, k_best_moves=5):
+
+def mcts_move(board, max_games=550, max_depth=50, k_best_moves=5):
     process_num = multiprocessing.cpu_count() - 1
     indices = [(board, max_games, max_depth, k_best_moves)] * (process_num)
     first_root = None
@@ -436,17 +438,25 @@ def mcts_move(board, max_games=550, max_depth=20, k_best_moves=5):
 def mcts_move_helper(parameters):
     board, max_games, max_depth, k_best_moves = parameters
     start_time = time.time()  # about 24 seconds for a single processor
+    start_material_score = basic_evaluation(board)
 
-    def get_material_reward(board, start_turn_is_white):
-        material_score = get_material_score(board)
-        if material_score > 0:
-            reward = 1
-        elif material_score < 0:
-            reward = 0
+    def get_material_reward(board, start_turn_is_white, start_material_score):
+        material_score = get_material_score(board) - start_material_score
+
+        if start_turn_is_white:
+            if material_score > 0:
+                reward = 0.6
+            elif material_score < 0:
+                reward = 0
+            else:
+                reward = 0.5
         else:
-            reward = 0.5
-        if not start_turn_is_white:
-            reward = 1 - reward
+            if material_score > 0:
+                reward = 0
+            elif material_score < 0:
+                reward = 0.6
+            else:
+                reward = 0.5
         return reward
 
     MCTS_Node.reset_counter()
@@ -464,38 +474,30 @@ def mcts_move_helper(parameters):
         else:
             if board.turn:
                 if not node.board.turn:
-                    if board.is_checkmate:
+                    if node.board.is_checkmate():
                         reward = 1
                     else:
-                        if node.depth == max_depth:
-                            reward = 0.5
-                        else:
-                            reward = get_material_reward(node.board, board.turn)
+                        assert node.depth == max_depth
+                        reward = get_material_reward(node.board, board.turn, start_material_score)
                 else:
-                    if board.is_checkmate:
+                    if node.board.is_checkmate():
                         reward = 0
                     else:
-                        if node.depth == max_depth:
-                            reward = 0.5
-                        else:
-                            reward = get_material_reward(node.board, board.turn)
+                        assert node.depth == max_depth
+                        reward = get_material_reward(node.board, board.turn, start_material_score)
             else:
                 if not node.board.turn:
-                    if board.is_checkmate:
+                    if node.board.is_checkmate():
                         reward = 0
                     else:
-                        if node.depth == max_depth:
-                            reward = 0.5
-                        else:
-                            reward = get_material_reward(node.board, board.turn)
+                        assert node.depth == max_depth
+                        reward = get_material_reward(node.board, board.turn, start_material_score)
                 else:
-                    if board.is_checkmate:
+                    if node.board.is_checkmate():
                         reward = 1
                     else:
-                        if node.depth == max_depth:
-                            reward = 0.5
-                        else:
-                            reward = get_material_reward(node.board, board.turn)
+                        assert node.depth == max_depth
+                        reward = get_material_reward(node.board, board.turn, start_material_score)
 
         for node in game_nodes:
             node.played += 1
