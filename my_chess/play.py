@@ -90,6 +90,9 @@ class MainWindow(QWidget):
                 pass
         if self.use_mcts:
             move = mcts_move(self.chessboard)[0]
+            gc.collect(generation=2)
+            gc.collect(generation=1)
+            gc.collect(generation=0)
             return move
         if self.use_nn:
             try:
