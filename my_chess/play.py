@@ -20,10 +20,10 @@ class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.setGeometry(100, 100, 1100, 1100)
+        self.setGeometry(500, 50, 1000, 1000)
 
         self.widgetSvg = QSvgWidget(parent=self)
-        self.widgetSvg.setGeometry(10, 10, 1080, 1080)
+        self.widgetSvg.setGeometry(0, 0, 1000, 1000)
 
         if args.board is not None:
             self.chessboard = chess.Board(args.board)
@@ -96,7 +96,7 @@ class MainWindow(QWidget):
                 if self.nn_model is None:
                     from tensorflow import keras
                     self.nn_model = keras.models.load_model(self.config['train']['nn_model_path'])
-                moves = get_nn_moves([self.chessboard.copy()], self.nn_model)[0]  # returns the best k moves
+                moves, _ = get_nn_moves_and_probabilities([self.chessboard.copy()], self.nn_model)[0]  # returns the best k moves
                 for m in moves:
                     if chess.Move.from_uci(m) in self.chessboard.legal_moves:
                         return chess.Move.from_uci(m)
@@ -509,7 +509,7 @@ def mcts_move_helper(parameters):
     return root
 
 
-def get_nn_moves(board_list, model, k_best_moves=5):
+def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
     from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
         sort_moves_and_probabilities
     input_representation = np.zeros([len(board_list), 8, 8, INPUT_PLANES])
@@ -519,7 +519,8 @@ def get_nn_moves(board_list, model, k_best_moves=5):
             board = board.mirror()
         input_representation[i] = get_input_representation(board, 0)[np.newaxis]
     output = model.predict(input_representation)
-    res = []
+    moves = []
+    probabilities = []
     for i in range(output.shape[0]):
 
         o = output[i]
@@ -529,13 +530,14 @@ def get_nn_moves(board_list, model, k_best_moves=5):
         o2[a, b, c] = o[a, b, c]
         m, p = output_representation_to_moves_and_probabilities(o2)
         if m.size == 0:
-            res.append([])
+            moves.append([])
             continue
         m, p = sort_moves_and_probabilities(m, p)
         if not board_list[i].turn:
             m = [move_to_mirror_move(move) for move in m]
-        res.append(m)
-    return res
+        moves.append(m)
+        probabilities.append(p)
+    return moves, probabilities
 
 
 def alpha_beta_move(board):
