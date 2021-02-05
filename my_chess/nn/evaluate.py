@@ -6,8 +6,7 @@ import chess
 import json
 from tensorflow import keras
 import tensorflow as tf
-from play import get_nn_moves_and_probabilities
-from shared.shared_functionality import get_fen_moves_and_probabilities
+from shared.shared_functionality import get_fen_moves_and_probabilities, get_nn_moves_and_probabilities
 
 
 def evaluate_nn(total_samples = None):
@@ -21,7 +20,7 @@ def evaluate_nn(total_samples = None):
     score_list = []
     for i in range(10):
         for j in range(10):
-            score = single_file_evaluate(nn_model, score_list, config, total_samples, counter, i,i, k_best_moves=5)
+            score = single_file_evaluate(nn_model, score_list, config, total_samples, counter, i,i, k_best_moves=1)
             print("score:", score)
             counter = [0]
             score_list = []

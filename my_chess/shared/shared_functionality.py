@@ -1,5 +1,6 @@
 from collections import namedtuple
 import chess
+import numpy
 import numpy as np
 import os
 import pickle
@@ -78,8 +79,10 @@ def position_to_mirror_position(pos):
     new_position = col + str(row) + promotion
     return new_position
 
+
 def move_to_mirror_move(m):
     return position_to_mirror_position(m[:2]) + position_to_mirror_position(m[2:])
+
 
 def board_fen_to_hash(fen):
     import hashlib
@@ -113,3 +116,34 @@ def get_database_from_file(board_fen, database_path, file_name):
     with open(os.path.join(database_path, file_name + '{0}_{1}.pkl').format(index1, index2), 'rb') as f:
         database = pickle.load(f)
     return database
+
+
+def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
+    from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
+        sort_moves_and_probabilities
+    input_representation = np.zeros([len(board_list), 8, 8, INPUT_PLANES])
+    for i, board in enumerate(board_list):
+        board_turn = board.turn
+        if not board_turn:
+            board = board.mirror()
+        input_representation[i] = get_input_representation(board, 0)[np.newaxis]
+    output = model.predict(input_representation)
+    moves = []
+    probabilities = []
+    for i in range(output.shape[0]):
+
+        o = output[i]
+        threshold = np.sort(o.flatten())[-k_best_moves]
+        a, b, c = np.where(o >= threshold)
+        o2 = np.zeros([8, 8, OUTPUT_PLANES])
+        o2[a, b, c] = o[a, b, c]
+        m, p = output_representation_to_moves_and_probabilities(o2)
+        if m.size == 0:
+            moves.append([])
+            continue
+        m, p = sort_moves_and_probabilities(m, p)
+        if not board_list[i].turn:
+            m = [move_to_mirror_move(move) for move in m]
+        moves.append(m)
+        probabilities.append(p)
+    return moves, probabilities

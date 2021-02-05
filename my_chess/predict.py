@@ -4,20 +4,20 @@ import numpy as np
 from shared.shared_functionality import *
 import shared
 
-# get a set of player games
-with open("/home/blacknight/Downloads/Kasparov.pgn") as pgn:
-    first_game = chess.pgn.read_game(pgn)
-    second_game = chess.pgn.read_game(pgn)
-# get board:
-board = first_game.board()
-
-# get moves:
-moves_generator = first_game.mainline()
-
-# get game meta data:
-print(first_game.headers)
-# get game winner
-print(first_game.headers["Result"])
+# # get a set of player games
+# with open("/home/blacknight/Downloads/Kasparov.pgn") as pgn:
+#     first_game = chess.pgn.read_game(pgn)
+#     second_game = chess.pgn.read_game(pgn)
+# # get board:
+# board = first_game.board()
+#
+# # get moves:
+# moves_generator = first_game.mainline()
+#
+# # get game meta data:
+# print(first_game.headers)
+# # get game winner
+# print(first_game.headers["Result"])
 
 
 def get_input_representation(board, p1_repetitions):
