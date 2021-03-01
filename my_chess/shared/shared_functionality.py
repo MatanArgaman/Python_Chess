@@ -133,8 +133,21 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
     for i in range(output.shape[0]):
 
         o = output[i]
-        threshold = np.sort(o.flatten())[-k_best_moves]
+        sorted_o = np.sort(o.flatten())
+        threshold = sorted_o[-k_best_moves]
         a, b, c = np.where(o >= threshold)
+        if a.size > k_best_moves:
+            high = k_best_moves
+            low = 0
+            while high-low>1 or a.size> k_best_moves:
+                k_best_moves = (low + high) // 2
+                threshold = sorted_o[-k_best_moves]
+                a, b, c = np.where(o >= threshold)
+                if a.size > k_best_moves:
+                    high = k_best_moves - 1
+                else:
+                    low = k_best_moves
+
         o2 = np.zeros([8, 8, OUTPUT_PLANES])
         o2[a, b, c] = o[a, b, c]
         m, p = output_representation_to_moves_and_probabilities(o2)
