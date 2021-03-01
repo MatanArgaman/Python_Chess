@@ -1,13 +1,14 @@
 import pickle
-from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position, move_to_mirror_move
-from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
 import tqdm
 from multiprocessing import Pool
 import multiprocessing
-from predict import get_input_representation, get_output_representation
 import chess
 import numpy as np
 from scipy.sparse import save_npz, csr_matrix
+
+from predict import get_input_representation, get_output_representation
+from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position, move_to_mirror_move
+from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
 
 for i in range(10):
     with open('/home/blacknight/Downloads/stat{}.pkl'.format(i), 'rb') as f:
@@ -118,6 +119,51 @@ def create_input_output_representation(indices):
     sparse_input_arr = csr_matrix(input_arr.reshape([8,-1]))
     save_npz('/home/blacknight/Downloads/estat{0}_{1}_i.npz'.format(index1, index2), sparse_input_arr)
     save_npz('/home/blacknight/Downloads/estat{0}_{1}_o.npz'.format(index1, index2), sparse_output_arr)
+
+
+def create_input_output_representation_with_win_probability(indices):
+    index1, index2 = indices
+    with open('/home/blacknight/Downloads/dstat{0}_{1}.pkl'.format(index1, index2), 'rb') as f:
+        d = pickle.load(f)
+    input_arr = np.zeros([8, 8, INPUT_PLANES * len(d.items())], dtype=np.float)
+    output_arr = np.zeros([8, 8, OUTPUT_PLANES * len(d.items())], dtype=np.float)
+    value = np.zeros([len(d.items())], dtype=np.float)
+    for i, (fen, item) in enumerate(d.items()):
+        b = chess.Board(fen)
+        moves_and_probabilities =[]
+        wins =  0
+        draws = 0
+        losses = 0
+        for k,v in item.items():
+            moves_and_probabilities.append((k, v['r']))
+            wins+= v['w']
+            losses+= v['l']
+            draws+= v['d']
+
+        played  = wins + losses + draws
+        value[i] = (float(wins-losses)/played) # range from -1 to 1
+
+        if not b.turn: # if black's turn then mirror board and moves
+            b = b.mirror()
+            moves = np.array([move_to_mirror_move(m[0]) for m in moves_and_probabilities])
+        else:
+            moves = np.array([m[0] for m in moves_and_probabilities])
+        probabilities = np.array([m[1] for m in moves_and_probabilities])
+        probabilities = np.square(probabilities)  # gives higher probabilities more preference
+        probabilities /= probabilities.sum()  # normalize
+        input_arr[..., i * INPUT_PLANES:(i + 1) * INPUT_PLANES] = get_input_representation(b, 0)
+        output_arr[..., i * OUTPUT_PLANES:(i + 1) * OUTPUT_PLANES] = get_output_representation(moves, probabilities, b)
+    sparse_output_arr = csr_matrix(output_arr.reshape([8,-1]))
+    sparse_input_arr = csr_matrix(input_arr.reshape([8,-1]))
+    save_npz('/home/blacknight/Downloads/estat{0}_{1}_i.npz'.format(index1, index2), sparse_input_arr)
+    save_npz('/home/blacknight/Downloads/estat{0}_{1}_o.npz'.format(index1, index2), sparse_output_arr)
+    with open('/home/blacknight/Downloads/estat{0}_{1}_v.pkl'.format(index1, index2), 'wb') as f:
+        pickle.dump(value, f)
+
+
+
+
+
 
 indices = []
 for i in range(10):

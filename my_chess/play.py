@@ -13,7 +13,8 @@ import multiprocessing
 from shared.shared_functionality import *
 from shared.shared_functionality import get_nn_moves_and_probabilities
 
-mcts_process_num = multiprocessing.cpu_count() - 1
+# mcts_process_num = multiprocessing.cpu_count() - 1
+mcts_process_num = 3
 
 
 class MainWindow(QWidget):
@@ -64,6 +65,7 @@ class MainWindow(QWidget):
                                                                 chess.Piece.from_symbol('P')]:
                     end_position = position_to_index_1d(self.human_move[2:])
                     if start_position in [end_position + ROW_SIZE, end_position - ROW_SIZE]:
+                        print('enter promotion: q, r, b, n')
                         value = input()
                         if value in ['q', 'r', 'b', 'n']:
                             move = chess.Move.from_uci(self.human_move + value)
@@ -190,7 +192,8 @@ class MainWindow(QWidget):
 
 def find_matching_index(list1, list2):
     inverse_index = set(list1)
-    return [index for index, element in enumerate(list2) if element in inverse_index]
+    list2_map = dict((m,index) for index, m in enumerate(list2))
+    return [list2_map[item] for item in list1 if item in list2_map]
 
 
 class Node:
@@ -211,7 +214,6 @@ class Node:
     @staticmethod
     def reset_counter():
         Node.counter = 0
-
 
 
 class MCTS_Node:
@@ -239,17 +241,34 @@ class MCTS_Node:
         self.nn_moves = []
         self.available_capturing_moves = []
         self.legal_moves = []
+
+        start_pos_dict = {}
+
         for i, m in enumerate(self.board.legal_moves):
             self.legal_moves.append(m)
+            move_str = str(m)
+            start_pos = move_str[:2]
+            start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [i]
             if self.board.is_capture(m):
                 self.available_capturing_moves.append(i)
+        self.avoidance_moves = []
+
+        # calculate avoidance move
+        self.board.turn = not self.board.turn
+        for i, m in enumerate(self.board.legal_moves):
+            if self.board.is_capture(m):
+                start_pos = str(m)[2:4]
+                self.avoidance_moves += start_pos_dict.get(start_pos, [])
+        self.board.turn = not self.board.turn
+        self.avoidance_moves = list(set(self.avoidance_moves))
+
         if MCTS_Node.nn_model is not None:
             nn_moves, _ = get_nn_moves_and_probabilities([self.board], MCTS_Node.nn_model, k_best_moves=20)
             move_list = []
             for m in nn_moves[0]:
                 try:
                     m = chess.Move.from_uci(m)
-                except: # may fail due to illegal move
+                except:  # may fail due to illegal move
                     continue
                 move_list.append(m)
             self.nn_moves = find_matching_index(move_list, self.legal_moves)
@@ -270,7 +289,11 @@ class MCTS_Node:
         exploitation = self.win_percentage()
         exploration = np.log(self.parent_node.played) / self.played
         capturing_heuristic = (0.5 if self.capturing_move else 0) / self.played
-        return exploitation + np.sqrt(2 * exploration + capturing_heuristic)
+        nn_moves_heuristic = 0
+        if self.nn_moves:
+            nn_moves_heuristic += 1.0
+            nn_moves_heuristic/=self.played
+        return exploitation + np.sqrt(2 * exploration + capturing_heuristic + nn_moves_heuristic)
 
     def add_new_child(self, move, move_index):
         assert self.legal_moves[move_index] == move
@@ -283,7 +306,7 @@ class MCTS_Node:
         '''
         :return: a child node according to adaptive multi stage sampling
         '''
-        NEW_NODE_CHANCE = 0.2
+        NEW_NODE_CHANCE = 0.1
         new_move = False
         if self.child_nodes:
             if np.random.rand() <= NEW_NODE_CHANCE:
@@ -293,16 +316,30 @@ class MCTS_Node:
         if len(self.legal_moves) == len(self.explored_moves):  # all possible moves where explored
             new_move = False
         if new_move:
+            move_index = None
             unexplored_moves = set()
             if self.nn_moves:
                 unexplored_moves = set(self.nn_moves).difference(self.explored_moves)
+                if unexplored_moves:
+                    move_index = list(unexplored_moves)[0]
             if not unexplored_moves:
-                CAPTURING_MOVES_CHANCE = 0.5
-                if self.available_capturing_moves and np.random.rand() <= CAPTURING_MOVES_CHANCE:
-                    unexplored_moves = set(self.available_capturing_moves).difference(self.explored_moves)
+                CAPTURING_OR_AVOIDANCE_MOVE_CHANCE = 0.5
+                CAPTURING_MOVE_CHANCE = 0.5
+
+                if self.available_capturing_moves and np.random.rand() <= CAPTURING_OR_AVOIDANCE_MOVE_CHANCE:
+                    if np.random.rand() < CAPTURING_MOVE_CHANCE:
+                        unexplored_moves = set(self.available_capturing_moves).difference(self.explored_moves)
+                    else:
+                        unexplored_moves = set(self.avoidance_moves).difference(self.explored_moves)
+
             if not unexplored_moves:
-                unexplored_moves = set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
-            move_index = list(unexplored_moves)[np.random.randint(len(unexplored_moves))]
+                if np.random.rand() < NEW_NODE_CHANCE or not self.child_nodes:
+                    unexplored_moves = set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
+                else:
+                    child_node = heapq.heappop(self.child_ams_heapq)[2]
+                    return child_node
+            if move_index is None:
+                move_index = list(unexplored_moves)[np.random.randint(len(unexplored_moves))]
             move = self.legal_moves[move_index]
             child_node = self.add_new_child(move, move_index)
         else:
@@ -443,9 +480,9 @@ def merge_trees(node1, node2):
             n.update_parent_heap()
 
 
-def mcts_move(board, max_games=500, max_depth=20, k_best_moves=5):
+def mcts_move(board, max_games=300, max_depth=20, k_best_moves=5):
     global mcts_process_num
-    assert max_depth%2 ==0, "depth must be an equal number for last move to end in opponenet move"
+    assert max_depth % 2 == 0, "depth must be an equal number for last move to end in opponenet move"
     indices = [(board, max_games, max_depth, k_best_moves)] * mcts_process_num
     first_root = None
     with Pool(mcts_process_num) as p:
@@ -458,6 +495,8 @@ def mcts_move(board, max_games=500, max_depth=20, k_best_moves=5):
     root = first_root
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
+    for item in sorted_nodes:  # debugging
+        print(item[0].move, item[1],item[0].played)
     k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
     moves = [n[0].move for n in k_best_nodes]
     return moves
@@ -495,12 +534,12 @@ def mcts_move_helper(parameters):
             if material_score > 0:
                 reward = 0.6
             elif material_score < 0:
-                reward = 0
+                reward = 0.4
             else:
                 reward = 0.5
         else:
             if material_score > 0:
-                reward = 0
+                reward = 0.4
             elif material_score < 0:
                 reward = 0.6
             else:
