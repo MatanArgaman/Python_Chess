@@ -4,7 +4,7 @@
   "input_output_files_filename": "estat",
   "test_index1": 9,
   "test_index2": 9,
-  "nn_model_path": "/home/blacknight/bin/models/mymodel4",
+  "nn_model_path": "/home/blacknight/bin/models/mymodel5",
   "nn_model_function": "policy1",
   "nn_evaluation_filename": "eval.json" 
  },

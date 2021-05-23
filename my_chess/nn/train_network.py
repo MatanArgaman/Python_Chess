@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import os
 import json
 import argparse
+import subprocess
+from shutil import copyfile
 
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
 from scipy.sparse import load_npz
@@ -138,6 +140,30 @@ def get_nn_io_file(index1, index2, is_input=True):
                                  con_train['input_output_files_filename'] +
                                  '{0}_{1}_{2}.npz'.format(index1, index2, 'i' if is_input else 'o')))
 
+def save_run_configuration_settings(config):
+    # create the directory
+    try:
+        os.mkdir(config['train']['nn_model_path'])
+    except:
+        pass
+    # save the git commit hash
+    import subprocess
+    label = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip()
+    with open(os.path.join(config['train']['nn_model_path'], "git.commit"), "wb") as f:
+        f.write(label)
+
+    # save the git diff
+    diff = subprocess.check_output(["git", "diff"])
+    with open(os.path.join(config['train']['nn_model_path'], "git.diff"), "wb") as f:
+        f.write(diff)
+
+    # save the config file
+    config_path = get_config_path()
+    filename = os.path.basename(config_path)
+    copyfile(config_path, os.path.join(config['train']['nn_model_path'], filename))
+
+def get_config_path():
+    return os.path.join(os.getcwd(), 'config.json')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -147,8 +173,10 @@ if __name__ == '__main__':
     index1_order = np.random.permutation(10)
     index2_order = np.random.permutation(10)
 
-    with open(os.path.join(os.getcwd(), 'config.json'), 'r') as f:
+    with open(get_config_path(), 'r') as f:
         config = json.load(f)
+
+    save_run_configuration_settings(config)
 
     train_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'train'))
     test_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'test'))
