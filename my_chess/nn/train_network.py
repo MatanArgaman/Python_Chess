@@ -126,6 +126,7 @@ class NNModels:
         model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
         return model
 
+    @staticmethod
     def get_model(model_name):
         return getattr(NNModels, model_name)()
 
