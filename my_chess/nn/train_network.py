@@ -188,6 +188,8 @@ if __name__ == '__main__':
         model = keras.models.load_model(con_train['nn_model_path'])
     else:
         model = get_model(config)
+        #plot the model
+        keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
 
     index1_test = con_train['test_index1']
     index2_test = con_train['test_index2']
