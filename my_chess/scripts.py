@@ -10,6 +10,8 @@ from predict import get_input_representation, get_output_representation
 from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position, move_to_mirror_move
 from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
 
+raise Exception('None runnable file') # prevent this file from being accidentally ran
+
 for i in range(10):
     with open('/home/blacknight/Downloads/stat{}.pkl'.format(i), 'rb') as f:
         a = pickle.load(f)
