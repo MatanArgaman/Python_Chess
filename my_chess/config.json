@@ -5,7 +5,7 @@
   "test_index1": 9,
   "test_index2": 9,
   "nn_model_path": "/home/blacknight/bin/models/mymodel5",
-  "nn_model_function": "policy3",
+  "nn_model_function": "policy4",
   "nn_evaluation_filename": "eval.json" 
  },
  "database": {

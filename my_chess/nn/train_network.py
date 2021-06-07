@@ -13,6 +13,7 @@ import json
 import argparse
 import subprocess
 from shutil import copyfile
+import pickle
 
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
 from scipy.sparse import load_npz
@@ -114,17 +115,34 @@ class NNModels:
         return model
 
     @staticmethod
-    def policy_value1():
-        inputs = keras.Input(shape=(8, 8, INPUT_PLANES))
-        x = layers.Conv2D(48, (4, 4), activation='relu', input_shape=(8, 8, INPUT_PLANES), padding='same')(inputs)
-        x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1), padding='same')(x)
-        x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
-        x = layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1), padding='same')(x)
-        x = layers.Conv2D(OUTPUT_PLANES, (3, 3), activation='softmax', padding='same')(x)
-        model = keras.Model(inputs=inputs, outputs=x, name="chess_model")
+    def policy4():
+        input = Input(shape=(8, 8, INPUT_PLANES))
+        x = conv_batchnorm_relu(input, filters=64, kernel_size=7, strides=1)
+        x = MaxPool2D(pool_size=3, strides=1, padding='same')(x)
+        x = resnet_block(x, filters=64, reps=3, strides=1)
+        x = resnet_block(x, filters=128, reps=4, strides=1)
+        x = resnet_block(x, filters=256, reps=6, strides=1)
+
+        # will be saved along with the model to enable transfer learning from this layer
+        layer_name = x.name[:x.name.index('/')]
+
+        # to be added using transfer learning
+        # # x1 - value head
+        # x1 = resnet_block(x, filters=32, reps=2, strides=1)
+        # x1 = tf.keras.layers.Flatten()(x1)
+        # x1 = tf.keras.layers.Dense(1)(x1)
+        # x1 = tf.keras.activations.tanh(x1) # range is between -1 to 1
+
+        # x2 - policy head
+        x2 = resnet_block(x, filters=OUTPUT_PLANES, reps=2, strides=1)
+        x2 = conv_batchnorm_relu(x2, filters=OUTPUT_PLANES, kernel_size=1, strides=1)
+        x2 = tf.keras.layers.Dense(OUTPUT_PLANES)(x2)
+        x2= keras.layers.Softmax()(x2)
+
+        model = Model(inputs=input, outputs=x2)
         opt = keras.optimizers.Adam()  # learning_rate=0.01
         model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
-        return model
+        return model, layer_name
 
     @staticmethod
     def get_model(model_name):
@@ -140,6 +158,15 @@ def get_nn_io_file(index1, index2, is_input=True):
     return load_npz(os.path.join(con_train['input_output_files_path'],
                                  con_train['input_output_files_filename'] +
                                  '{0}_{1}_{2}.npz'.format(index1, index2, 'i' if is_input else 'o')))
+
+def get_nn_win_file(index1, index2):
+    path = os.path.join(con_train['input_output_files_path'],
+                                 con_train['input_output_files_filename'] +
+                                 '{0}_{1}_v.pkl'.format(index1, index2))
+    with open(path, 'rb') as f:
+        c = pickle.load(f)
+    return c
+
 
 def save_run_configuration_settings(config):
     # create the directory
@@ -187,7 +214,16 @@ if __name__ == '__main__':
     if args.load:
         model = keras.models.load_model(con_train['nn_model_path'])
     else:
-        model = get_model(config)
+        res = get_model(config)
+        if isinstance(res, tuple):
+            model = res[0]
+            layer_name = res[1]
+            # save the layer name for future transfer learning
+            with open(os.path.join(config['train']['nn_model_path'], 'transfer_layer_name.txt'), 'w') as f:
+                f.write(res[1])
+        else:
+            model = res
+            layer_name = None
         #plot the model
         keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
 
@@ -199,7 +235,7 @@ if __name__ == '__main__':
         for a, i in enumerate(index1_order):
             for b, j in enumerate(index2_order):
                 if i == index1_test and j == index2_test:
-                    continue  # leave the last file for test
+                    continue  # leave the a single file (1/100 of the data) for test
 
                 k_range = np.arange(1,20)
                 train_score = single_file_evaluate(model, config, 10000, i, j, k_range)
