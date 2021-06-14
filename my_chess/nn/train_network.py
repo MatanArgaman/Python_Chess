@@ -204,8 +204,8 @@ def save_run_configuration_settings(config, model, save_model_architecture_plot=
     keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
 
 
-def get_config_path():
-    return os.path.join(os.getcwd(), 'config.json')
+def get_config_path(file_name = 'config.json'):
+    return os.path.join(os.getcwd(), 'configs/', file_name)
 
 
 def train_model(model, config, train_writer, test_writer):
@@ -248,13 +248,14 @@ def train_model(model, config, train_writer, test_writer):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default=get_config_path(), help='configuration file path')
     parser.add_argument('--load', action='store_true', help='continue training from existing network')
     args = parser.parse_args()
 
     index1_order = np.random.permutation(10)
     index2_order = np.random.permutation(10)
 
-    with open(get_config_path(), 'r') as f:
+    with open(args.config, 'r') as f:
         config = json.load(f)
 
     train_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'train'))
