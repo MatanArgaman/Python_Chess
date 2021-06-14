@@ -1,0 +1,15 @@
+{
+ "train": {
+  "input_output_files_path": "/content/gdrive/MyDrive/Python/My_Chess/Database",
+  "input_output_files_filename": "estat",
+  "test_index1": 9,
+  "test_index2": 9,
+  "nn_model_path": "/content/gdrive/MyDrive/GitHub/Python_Chess/Models",
+  "nn_model_function": "policy4",
+  "nn_evaluation_filename": "eval.json" 
+ },
+ "database": {
+  "file_path": "/content/gdrive/MyDrive/Python/My_Chess/Database",
+  "file_name": "dstat"
+ }
+}
