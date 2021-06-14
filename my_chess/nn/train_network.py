@@ -80,7 +80,7 @@ class NNModels:
             keras.layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1), padding='same'),
             keras.layers.Conv2D(64, (3, 3), activation='relu', padding='same'),
             keras.layers.MaxPooling2D(pool_size=(2, 2), strides=(1, 1), padding='same'),
-            keras.layers.Conv2D(OUTPUT_PLANES, (3, 3), activation=keras.layers.Softmax(axis=(1,2,3)), padding='same'),
+            keras.layers.Conv2D(OUTPUT_PLANES, (3, 3), activation=keras.layers.Softmax(axis=(1, 2, 3)), padding='same'),
         ])
         opt = keras.optimizers.Adam()  # learning_rate=0.01
         model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
@@ -137,7 +137,7 @@ class NNModels:
         x2 = resnet_block(x, filters=OUTPUT_PLANES, reps=2, strides=1)
         x2 = conv_batchnorm_relu(x2, filters=OUTPUT_PLANES, kernel_size=1, strides=1)
         x2 = tf.keras.layers.Dense(OUTPUT_PLANES)(x2)
-        x2= keras.layers.Softmax()(x2)
+        x2 = keras.layers.Softmax()(x2)
 
         model = Model(inputs=input, outputs=x2)
         opt = keras.optimizers.Adam()  # learning_rate=0.01
@@ -149,7 +149,6 @@ class NNModels:
         return getattr(NNModels, model_name)()
 
 
-
 def get_model(config):
     return NNModels.get_model(config['train']['nn_model_function'])
 
@@ -159,16 +158,22 @@ def get_nn_io_file(index1, index2, is_input=True):
                                  con_train['input_output_files_filename'] +
                                  '{0}_{1}_{2}.npz'.format(index1, index2, 'i' if is_input else 'o')))
 
+
 def get_nn_win_file(index1, index2):
     path = os.path.join(con_train['input_output_files_path'],
-                                 con_train['input_output_files_filename'] +
-                                 '{0}_{1}_v.pkl'.format(index1, index2))
+                        con_train['input_output_files_filename'] +
+                        '{0}_{1}_v.pkl'.format(index1, index2))
     with open(path, 'rb') as f:
         c = pickle.load(f)
     return c
 
 
-def save_run_configuration_settings(config):
+def save_run_configuration_settings(config, model, save_model_architecture_plot=False,
+                                    transfer_learning_layer_name=None):
+    """
+    Save all the information needed to recreate the run
+    """
+
     # create the directory
     try:
         os.mkdir(config['train']['nn_model_path'])
@@ -190,43 +195,20 @@ def save_run_configuration_settings(config):
     filename = os.path.basename(config_path)
     copyfile(config_path, os.path.join(config['train']['nn_model_path'], filename))
 
+    # save the layer name for future transfer learning
+    if transfer_learning_layer_name is not None:
+        with open(os.path.join(config['train']['nn_model_path'], 'transfer_layer_name.txt'), 'w') as f:
+            f.write(transfer_learning_layer_name)
+
+    # plot the model
+    keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
+
+
 def get_config_path():
     return os.path.join(os.getcwd(), 'config.json')
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--load', action='store_true', help='continue training from existing network')
-    args = parser.parse_args()
 
-    index1_order = np.random.permutation(10)
-    index2_order = np.random.permutation(10)
-
-    with open(get_config_path(), 'r') as f:
-        config = json.load(f)
-
-    save_run_configuration_settings(config)
-
-    train_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'train'))
-    test_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'test'))
-
-    con_train = config['train']
-
-    if args.load:
-        model = keras.models.load_model(con_train['nn_model_path'])
-    else:
-        res = get_model(config)
-        if isinstance(res, tuple):
-            model = res[0]
-            layer_name = res[1]
-            # save the layer name for future transfer learning
-            with open(os.path.join(config['train']['nn_model_path'], 'transfer_layer_name.txt'), 'w') as f:
-                f.write(res[1])
-        else:
-            model = res
-            layer_name = None
-        #plot the model
-        keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
-
+def train_model(model, config, train_writer, test_writer):
     index1_test = con_train['test_index1']
     index2_test = con_train['test_index2']
     step = 0
@@ -237,7 +219,7 @@ if __name__ == '__main__':
                 if i == index1_test and j == index2_test:
                     continue  # leave the a single file (1/100 of the data) for test
 
-                k_range = np.arange(1,20)
+                k_range = np.arange(1, 20)
                 train_score = single_file_evaluate(model, config, 10000, i, j, k_range)
                 test_score = single_file_evaluate(model, config, 10000, index1_test, index2_test, k_range)
                 print("train:", train_score[:3].round(decimals=3))
@@ -263,3 +245,39 @@ if __name__ == '__main__':
                 model = keras.models.load_model(con_train['nn_model_path'])
                 print("epoch:", epoch, "round:", counter, '/', '99')
                 counter += 1
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--load', action='store_true', help='continue training from existing network')
+    args = parser.parse_args()
+
+    index1_order = np.random.permutation(10)
+    index2_order = np.random.permutation(10)
+
+    with open(get_config_path(), 'r') as f:
+        config = json.load(f)
+
+    train_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'train'))
+    test_writer = tf.summary.create_file_writer(os.path.join(config['train']['nn_model_path'], 'test'))
+
+    con_train = config['train']
+
+    transfer_learning_layer_name = None
+    save_model_architecture_plot = False
+
+    # get the model (load from disk or compile)
+    if args.load:
+        model = keras.models.load_model(con_train['nn_model_path'])
+    else:
+        res = get_model(config)
+        if isinstance(res, tuple):
+            model = res[0]
+            transfer_learning_layer_name = res[1]
+        else:
+            model = res
+            layer_name = None
+            save_model_architecture_plot = True
+
+    save_run_configuration_settings(config, model, save_model_architecture_plot, transfer_learning_layer_name)
+
+    train_model(model, config, train_writer, test_writer)
