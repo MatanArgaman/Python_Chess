@@ -250,7 +250,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default=get_config_path(), help='configuration file path')
     parser.add_argument('--load', action='store_true', help='continue training from existing network')
-    args = parser.parse_args()
+    args = parser.parse_args(args=[])
 
     index1_order = np.random.permutation(10)
     index2_order = np.random.permutation(10)
