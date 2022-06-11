@@ -83,7 +83,16 @@ class MainWindow(QWidget):
             try:
                 con_db = self.config['database']
                 database = get_database_from_file(self.chessboard.fen(), con_db['file_path'], con_db['file_name'])
+
+                # change fullmove_number, halfmove_clock temporarily to 0 since these are the fen values in the database.
+                fullmove_number = self.chessboard.fullmove_number
+                halfmove_clock = self.chessboard.halfmove_clock
+                self.chessboard.fullmove_number = 0
+                self.chessboard.halfmove_clock = 0
                 moves, probabilities = get_fen_moves_and_probabilities(database, self.chessboard.fen())
+                self.chessboard.fullmove_number = fullmove_number
+                self.chessboard.halfmove_clock = halfmove_clock
+
                 index = np.searchsorted(probabilities.cumsum(), np.random.rand(), side='left')
                 return chess.Move.from_uci(moves[index])
             except:

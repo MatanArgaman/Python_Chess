@@ -11,7 +11,7 @@ from scipy.sparse import csr_matrix, save_npz
 from pathlib import Path
 
 from predict import get_output_representation, get_input_representation
-from shared.shared_functionality import move_to_mirror_move, INPUT_PLANES, OUTPUT_PLANES
+from shared.shared_functionality import move_to_mirror_move, INPUT_PLANES, OUTPUT_PLANES, get_move_value
 
 
 def main(path, cpu_count):
@@ -42,7 +42,7 @@ def create_input_output_representation_with_win_probability(path):
         losses = 0
         for move, v in item.items():
             if float(v['wins'] - v['losses']) > 0:
-                moves_and_probabilities.append((move, float(v['wins'] - v['losses']) / (v['wins'] + v['losses'] + v['draws'])))
+                moves_and_probabilities.append((move, get_move_value(v)))
                 wins += v['wins']
                 losses += v['losses']
                 draws += v['draws']

@@ -97,16 +97,21 @@ def board_fen_to_hash384(fen):
     m.update(fen.encode())
     return int.from_bytes(m.digest(), byteorder='little')
 
+def get_move_value(v):
+    return float(v['wins'] - v['losses']) / (v['wins'] + v['losses'] + v['draws'])
 
-def get_fen_moves_and_probabilities(database, baord_fen):
-    value = database.get(baord_fen)
+def get_fen_moves_and_probabilities(database, board_fen):
+    value = database.get(board_fen)
     if len(value.keys()) > 0:
-        moves_and_probabilities = [(k, v['r']) for k, v in value.items()]
-        value = np.array([m[0] for m in moves_and_probabilities])
+        moves_and_probabilities = []
+        for k, v in value.items():
+            if float(v['wins'] - v['losses']) > 0:
+                moves_and_probabilities.append((k, get_move_value(v)))
+        moves = np.array([m[0] for m in moves_and_probabilities])
         probabilities = np.array([m[1] for m in moves_and_probabilities])
         probabilities = np.square(probabilities)  # gives higher probabilities more preference
         probabilities /= probabilities.sum()  # normalize
-        return value, probabilities
+        return moves, probabilities
     return None, None
 
 

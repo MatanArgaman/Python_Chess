@@ -1,12 +1,12 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import LeakyReLU
-from tensorflow.keras.layers import Input, Conv2D, BatchNormalization
-from tensorflow.keras.layers import MaxPool2D, GlobalAvgPool2D
-from tensorflow.keras.layers import Add, ReLU, Dense
-from tensorflow.keras import Model
+from keras import layers
+from keras.layers import LeakyReLU
+from keras.layers import Input, Conv2D, BatchNormalization
+from keras.layers import MaxPool2D, GlobalAvgPool2D
+from keras.layers import Add, ReLU, Dense
+from keras import Model
 import matplotlib.pyplot as plt
 import os
 import json
@@ -153,16 +153,16 @@ def get_model(config):
     return NNModels.get_model(config['train']['nn_model_function'])
 
 
-def get_nn_io_file(index1, index2, is_input=True):
+def get_nn_io_file(index1, is_input=True):
     return load_npz(os.path.join(con_train['input_output_files_path'],
                                  con_train['input_output_files_filename'] +
-                                 '{0}_{1}_{2}.npz'.format(index1, index2, 'i' if is_input else 'o')))
+                                 '{0}_{1}.npz'.format(index1, 'i' if is_input else 'o')))
 
 
-def get_nn_win_file(index1, index2):
+def get_nn_win_file(index1):
     path = os.path.join(con_train['input_output_files_path'],
                         con_train['input_output_files_filename'] +
-                        '{0}_{1}_v.pkl'.format(index1, index2))
+                        '{0}_v.pkl'.format(index1))
     with open(path, 'rb') as f:
         c = pickle.load(f)
     return c
@@ -205,46 +205,44 @@ def save_run_configuration_settings(config, model, save_model_architecture_plot=
 
 
 def get_config_path(file_name = 'config.json'):
-    return os.path.join(os.getcwd(), 'configs/', file_name)
+    return os.path.join(os.getcwd(), os.pardir, 'configs/', file_name)
 
 
 def train_model(model, config, train_writer, test_writer):
     index1_test = con_train['test_index1']
-    index2_test = con_train['test_index2']
     step = 0
     for epoch in range(20):
         counter = 0
         for a, i in enumerate(index1_order):
-            for b, j in enumerate(index2_order):
-                if i == index1_test and j == index2_test:
-                    continue  # leave the a single file (1/100 of the data) for test
+            if i == index1_test:
+                continue
 
-                k_range = np.arange(1, 20)
-                train_score = single_file_evaluate(model, config, 10000, i, j, k_range)
-                test_score = single_file_evaluate(model, config, 10000, index1_test, index2_test, k_range)
-                print("train:", train_score[:3].round(decimals=3))
-                print("test:", test_score[:3].round(decimals=3))
-                train_writer.flush()
-                test_writer.flush()
+            k_range = np.arange(1, 20)
+            train_score = single_file_evaluate(model, config, 10000, i, k_range)
+            test_score = single_file_evaluate(model, config, 10000, index1_test, k_range)
+            print("train:", train_score[:3].round(decimals=3))
+            print("test:", test_score[:3].round(decimals=3))
+            train_writer.flush()
+            test_writer.flush()
 
-                with train_writer.as_default():
-                    for l, k in enumerate(k_range):
-                        tf.summary.scalar("score_{0}".format(k), train_score[l], step=step)
-                with test_writer.as_default():
-                    for l, k in enumerate(k_range):
-                        tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
+            with train_writer.as_default():
+                for l, k in enumerate(k_range):
+                    tf.summary.scalar("score_{0}".format(k), train_score[l], step=step)
+            with test_writer.as_default():
+                for l, k in enumerate(k_range):
+                    tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
 
-                x_train = get_nn_io_file(i, j, is_input=True)
-                y_train = get_nn_io_file(i, j, is_input=False)
-                x_train = x_train.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
-                y_train = y_train.toarray().reshape([8, 8, -1, OUTPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
-                step += x_train.shape[0]
-                model.fit(x_train, y_train, epochs=1)
-                model.save(con_train['nn_model_path'])
-                del model
-                model = keras.models.load_model(con_train['nn_model_path'])
-                print("epoch:", epoch, "round:", counter, '/', '99')
-                counter += 1
+            x_train = get_nn_io_file(i, is_input=True)
+            y_train = get_nn_io_file(i, is_input=False)
+            x_train = x_train.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+            y_train = y_train.toarray().reshape([8, 8, -1, OUTPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+            step += x_train.shape[0]
+            model.fit(x_train, y_train, epochs=1)
+            model.save(con_train['nn_model_path'])
+            del model
+            model = keras.models.load_model(con_train['nn_model_path'])
+            print("epoch:", epoch, "round:", counter, '/', '99')
+            counter += 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

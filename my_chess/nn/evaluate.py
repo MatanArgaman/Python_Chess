@@ -34,10 +34,10 @@ def evaluate_nn(total_samples=None):
             # score_list.append(score)
 
 
-def single_file_evaluate(nn_model, config, total_samples, file_index1, file_index2, k_best_moves=np.arange(1 , 2)):
+def single_file_evaluate(nn_model, config, total_samples, file_index1, k_best_moves=np.arange(1 , 2)):
     con_data = config['database']
     with open(os.path.join(con_data['file_path'],
-                           con_data['file_name'] + '{0}_{1}.pkl'.format(file_index1, file_index2)), 'rb') as f:
+                           con_data['file_name'] + '{0}.pkl'.format(file_index1)), 'rb') as f:
         d = pickle.load(f)
 
     expert_moves_list = []
@@ -52,8 +52,6 @@ def single_file_evaluate(nn_model, config, total_samples, file_index1, file_inde
             expert_moves = [m[:-1] if 'q' in m else m for m in expert_moves]
             expert_moves_list.append(expert_moves)
             board_fen_list.append(board_fen)
-
-
 
     nn_moves, _ = get_nn_moves_and_probabilities([chess.Board(bf) for bf in board_fen_list], nn_model,
                                                  k_best_moves=k_best_moves[-1])
@@ -78,8 +76,8 @@ if __name__ == '__main__':
     nn_model = keras.models.load_model(config['train']['nn_model_path'])
 
     UP_TO_K = 50
-    train_score = single_file_evaluate(nn_model, config, 1000, test_index1, 9 - test_index2, k_best_moves=np.arange(1, UP_TO_K))
-    test_score = single_file_evaluate(nn_model, config, 1000, test_index1, test_index2, k_best_moves=np.arange(1, UP_TO_K))
+    train_score = single_file_evaluate(nn_model, config, 1000, test_index1, k_best_moves=np.arange(1, UP_TO_K))
+    test_score = single_file_evaluate(nn_model, config, 1000, test_index1, k_best_moves=np.arange(1, UP_TO_K))
     figure()
     plot(np.arange(1, UP_TO_K), train_score, 'r')
     plot(np.arange(1, UP_TO_K), test_score, 'b')
