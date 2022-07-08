@@ -14,6 +14,8 @@ import argparse
 import subprocess
 from shutil import copyfile
 import pickle
+from pathlib import Path
+import re
 
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
 from scipy.sparse import load_npz
@@ -110,7 +112,7 @@ class NNModels:
         x = conv_batchnorm_relu(x, filters=OUTPUT_PLANES, kernel_size=1, strides=1)
         output = keras.layers.Softmax()(x)
         model = Model(inputs=input, outputs=output)
-        opt = keras.optimizers.Adam()  # learning_rate=0.01
+        opt = keras.optimizers.Adam(learning_rate=0.01)  # learning_rate=0.01
         model.compile(optimizer=opt, loss='mean_squared_error', metrics=['accuracy'])
         return model
 
@@ -204,54 +206,61 @@ def save_run_configuration_settings(config, model, save_model_architecture_plot=
     keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
 
 
-def get_config_path(file_name = 'config.json'):
+def get_config_path(file_name='config.json'):
     return os.path.join(os.getcwd(), os.pardir, 'configs/', file_name)
+
+
+def get_all_train_files_indices(config):
+    paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(config["train"]["input_output_files_filename"] + "*_i.npz")]
+    indices = [eval(f.split("_")[0].split(config["train"]["input_output_files_filename"])[1]) for f in paths]
+    return indices
 
 
 def train_model(model, config, train_writer, test_writer):
     index1_test = con_train['test_index1']
     step = 0
-    for epoch in range(20):
-        counter = 0
-        for a, i in enumerate(index1_order):
+    file_indices = get_all_train_files_indices(config)
+    file_indices = np.array(file_indices)[np.random.permutation(len(file_indices))]
+    for epoch in range(100):
+        for counter, i in enumerate(file_indices):
             if i == index1_test:
                 continue
 
-            k_range = np.arange(1, 20)
-            train_score = single_file_evaluate(model, config, 10000, i, k_range)
-            test_score = single_file_evaluate(model, config, 10000, index1_test, k_range)
-            print("train:", train_score[:3].round(decimals=3))
-            print("test:", test_score[:3].round(decimals=3))
-            train_writer.flush()
-            test_writer.flush()
+            # evaluation:
+            if counter % config["train"]["rounds_between_eval"] == 0:
+                k_range = np.arange(1, 20)
+                train_score = single_file_evaluate(model, config, 10000, i, k_range)
+                test_score = single_file_evaluate(model, config, 10000, index1_test, k_range)
+                print("train:", train_score[:3].round(decimals=3))
+                print("test:", test_score[:3].round(decimals=3))
+                train_writer.flush()
+                test_writer.flush()
 
-            with train_writer.as_default():
-                for l, k in enumerate(k_range):
-                    tf.summary.scalar("score_{0}".format(k), train_score[l], step=step)
-            with test_writer.as_default():
-                for l, k in enumerate(k_range):
-                    tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
+                with train_writer.as_default():
+                    for l, k in enumerate(k_range):
+                        tf.summary.scalar("score_{0}".format(k), train_score[l], step=step)
+                with test_writer.as_default():
+                    for l, k in enumerate(k_range):
+                        tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
 
+            # get data and train
             x_train = get_nn_io_file(i, is_input=True)
             y_train = get_nn_io_file(i, is_input=False)
             x_train = x_train.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
             y_train = y_train.toarray().reshape([8, 8, -1, OUTPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
             step += x_train.shape[0]
-            model.fit(x_train, y_train, epochs=1)
+            model.fit(x_train, y_train, epochs=1, batch_size=128)
             model.save(con_train['nn_model_path'])
             del model
             model = keras.models.load_model(con_train['nn_model_path'])
-            print("epoch:", epoch, "round:", counter, '/', '99')
-            counter += 1
+            print("epoch:", epoch, "round:", counter, '/', len(file_indices))
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default=get_config_path(), help='configuration file path')
     parser.add_argument('--load', action='store_true', help='continue training from existing network')
     args = parser.parse_args(args=[])
-
-    index1_order = np.random.permutation(10)
-    index2_order = np.random.permutation(10)
 
     with open(args.config, 'r') as f:
         config = json.load(f)

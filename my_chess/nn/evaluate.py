@@ -56,9 +56,14 @@ def single_file_evaluate(nn_model, config, total_samples, file_index1, k_best_mo
     nn_moves, _ = get_nn_moves_and_probabilities([chess.Board(bf) for bf in board_fen_list], nn_model,
                                                  k_best_moves=k_best_moves[-1])
     for i in range(len(nn_moves)):
+        is_intersection = False
         for j, k in enumerate(k_best_moves):
+            if is_intersection:
+                score_list[j].append(1)
+                continue
             if set(nn_moves[i][:k]).intersection(expert_moves_list[i]):
                 score_list[j].append(1)
+                is_intersection = True
             else:
                 score_list[j].append(0)
     score_list = np.array([np.mean(item) for item in score_list])
