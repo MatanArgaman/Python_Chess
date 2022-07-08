@@ -15,7 +15,7 @@ import subprocess
 from shutil import copyfile
 import pickle
 from pathlib import Path
-import re
+import time
 
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
 from scipy.sparse import load_npz
@@ -243,17 +243,28 @@ def train_model(model, config, train_writer, test_writer):
                     for l, k in enumerate(k_range):
                         tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
 
+                # save the model
+                save_model_start_time = time.time()
+                model.save(con_train['nn_model_path'])
+                save_model_end_time = time.time()
+                print("save model time: {:.2f} s".format(save_model_end_time - save_model_start_time))
+
             # get data and train
+            data_start_time = time.time()
             x_train = get_nn_io_file(i, is_input=True)
             y_train = get_nn_io_file(i, is_input=False)
             x_train = x_train.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
             y_train = y_train.toarray().reshape([8, 8, -1, OUTPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+            data_end_time = time.time()
+            print("data time: {:.2f} s".format(data_end_time-data_start_time))
             step += x_train.shape[0]
+            train_start_time = time.time()
             model.fit(x_train, y_train, epochs=1, batch_size=128)
-            model.save(con_train['nn_model_path'])
-            del model
-            model = keras.models.load_model(con_train['nn_model_path'])
+            train_end_time = time.time()
+            print("train time: {:.2f} s".format(train_end_time-train_start_time))
             print("epoch:", epoch, "round:", counter, '/', len(file_indices))
+        del model
+        model = keras.models.load_model(con_train['nn_model_path'])
 
 
 if __name__ == '__main__':
