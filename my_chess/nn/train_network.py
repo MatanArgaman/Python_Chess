@@ -242,6 +242,13 @@ def train_model(model, config, train_writer, test_writer):
                 with test_writer.as_default():
                     for l, k in enumerate(k_range):
                         tf.summary.scalar("score_{0}".format(k), test_score[l], step=step)
+                    x_test = get_nn_io_file(index1_test, is_input=True)
+                    y_test = get_nn_io_file(index1_test, is_input=False)
+                    x_test = x_test.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+                    y_test = y_test.toarray().reshape([8, 8, -1, OUTPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+                    history = model.evaluate(x_test, y_test)
+                    tf.summary.scalar("Loss", history[0], step=step)
+                    tf.summary.scalar("Accuracy", history[1], step=step)
 
                 # save the model
                 save_model_start_time = time.time()
@@ -259,7 +266,10 @@ def train_model(model, config, train_writer, test_writer):
             print("data time: {:.2f} s".format(data_end_time-data_start_time))
             step += x_train.shape[0]
             train_start_time = time.time()
-            model.fit(x_train, y_train, epochs=1, batch_size=128)
+            history = model.fit(x_train, y_train, epochs=1, batch_size=128)
+            with train_writer.as_default():
+                tf.summary.scalar("Loss", history.history['loss'][0], step=step)
+                tf.summary.scalar("Accuracy", history.history['accuracy'][0], step=step)
             train_end_time = time.time()
             print("train time: {:.2f} s".format(train_end_time-train_start_time))
             print("epoch:", epoch, "round:", counter, '/', len(file_indices))
