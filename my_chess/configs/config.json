@@ -6,7 +6,7 @@
   "nn_model_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1",
   "nn_model_function": "policy3",
   "nn_evaluation_filename": "eval.json",
-  "rounds_between_eval" : 100
+  "rounds_between_eval" : 50
  },
  "database": {
   "file_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
