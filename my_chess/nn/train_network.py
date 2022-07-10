@@ -271,7 +271,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', default=get_config_path(), help='configuration file path')
     parser.add_argument('--load', action='store_true', help='continue training from existing network')
-    args = parser.parse_args(args=[])
+    args = parser.parse_args()
 
     with open(args.config, 'r') as f:
         config = json.load(f)
