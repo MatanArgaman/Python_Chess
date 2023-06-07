@@ -1,10 +1,14 @@
 from collections import namedtuple
+from pathlib import Path
+
 import chess
 import numpy
 import numpy as np
 import os
 import pickle
 from enum import Enum
+
+from scipy.sparse import load_npz
 
 # Constants
 ROW_SIZE = 8
@@ -165,3 +169,19 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
         moves.append(m)
         probabilities.append(p)
     return moves, probabilities
+
+
+def get_config_path(file_name='config.json'):
+    return os.path.abspath(os.path.join(os.getcwd(), os.pardir, os.pardir, 'configs/', file_name))
+
+
+def get_nn_io_file(index1, con_train, is_input=True):
+    return load_npz(os.path.join(con_train['input_output_files_path'],
+                                 con_train['input_output_files_filename'] +
+                                 '{0}_{1}.npz'.format(index1, 'i' if is_input else 'o')))
+
+
+def get_all_train_files_indices(config):
+    paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(config["train"]["input_output_files_filename"] + "*_i.npz")]
+    indices = [eval(f.split("_")[0].split(config["train"]["input_output_files_filename"])[1]) for f in paths]
+    return indices

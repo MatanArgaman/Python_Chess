@@ -2,25 +2,19 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from keras import layers
-from keras.layers import LeakyReLU
 from keras.layers import Input, Conv2D, BatchNormalization
-from keras.layers import MaxPool2D, GlobalAvgPool2D
-from keras.layers import Add, ReLU, Dense
+from keras.layers import MaxPool2D
+from keras.layers import Add, ReLU
 from keras import Model
-import matplotlib.pyplot as plt
 import os
 import json
 import argparse
-import subprocess
 from shutil import copyfile
 import pickle
-from pathlib import Path
 import time
 
-from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
-from scipy.sparse import load_npz
-from predict import get_output_representation
-from nn.evaluate import single_file_evaluate
+from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES, get_config_path, get_nn_io_file, get_all_train_files_indices
+from nn.tensorflow_nn.evaluate import single_file_evaluate
 
 
 def conv_batchnorm_relu(x, filters, kernel_size, strides=1):
@@ -155,12 +149,6 @@ def get_model(config):
     return NNModels.get_model(config['train']['nn_model_function'])
 
 
-def get_nn_io_file(index1, is_input=True):
-    return load_npz(os.path.join(con_train['input_output_files_path'],
-                                 con_train['input_output_files_filename'] +
-                                 '{0}_{1}.npz'.format(index1, 'i' if is_input else 'o')))
-
-
 def get_nn_win_file(index1):
     path = os.path.join(con_train['input_output_files_path'],
                         con_train['input_output_files_filename'] +
@@ -204,16 +192,6 @@ def save_run_configuration_settings(config, model, save_model_architecture_plot=
 
     # plot the model
     keras.utils.plot_model(model, os.path.join(config['train']['nn_model_path'], "model.png"), show_shapes=True)
-
-
-def get_config_path(file_name='config.json'):
-    return os.path.join(os.getcwd(), os.pardir, 'configs/', file_name)
-
-
-def get_all_train_files_indices(config):
-    paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(config["train"]["input_output_files_filename"] + "*_i.npz")]
-    indices = [eval(f.split("_")[0].split(config["train"]["input_output_files_filename"])[1]) for f in paths]
-    return indices
 
 
 def train_model(model, config, train_writer, test_writer):

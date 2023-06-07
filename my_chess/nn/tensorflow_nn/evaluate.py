@@ -12,7 +12,7 @@ from matplotlib.pyplot import *
 
 def evaluate_nn(total_samples=None):
     # 1_6 is test
-    with open(os.path.join(os.getcwd(), '../', 'config.json'), 'r') as f:
+    with open(os.path.join(os.getcwd(), '../../', 'config.json'), 'r') as f:
         config = json.load(f)
 
     nn_model = keras.models.load_model(config['train']['nn_model_path'])
@@ -73,7 +73,7 @@ def single_file_evaluate(nn_model, config, total_samples, file_index1, k_best_mo
 
 if __name__ == '__main__':
     # print('gpu available:', tf.test.is_gpu_available())
-    with open(os.path.join(os.getcwd(), '../', 'config.json'), 'r') as f:
+    with open(os.path.join(os.getcwd(), '../../', 'config.json'), 'r') as f:
         config = json.load(f)
     # evaluate_nn(total_samples=10002)
     test_index1, test_index2 = config['train']['test_index1'], config['train']['test_index2']
