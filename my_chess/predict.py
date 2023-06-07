@@ -189,13 +189,13 @@ def output_representation_to_moves_and_probabilities(output_representation):
                 dc = steps
                 dr = 0
             elif direction == PlaneTypes.SOUTH_WEST.value:
-                dc = steps
+                dc = -steps
                 dr = -steps
             elif direction == PlaneTypes.SOUTH.value:
                 dc = 0
                 dr = -steps
             elif direction == PlaneTypes.SOUTH_EAST.value:
-                dc = -steps
+                dc = steps
                 dr = -steps
             elif direction == PlaneTypes.EAST.value:
                 dc = -steps
