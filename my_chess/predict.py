@@ -129,9 +129,9 @@ def get_output_representation(moves, probabilities, board):
                         direction = PlaneTypes.SOUTH_WEST.value
                 elif dc != 0:
                     if dc > 0:
-                        direction = PlaneTypes.WEST.value
-                    else:
                         direction = PlaneTypes.EAST.value
+                    else:
+                        direction = PlaneTypes.WEST.value
                     steps = np.abs(dc)
                 else:
                     assert dr != 0
@@ -186,7 +186,7 @@ def output_representation_to_moves_and_probabilities(output_representation):
                 dc = steps
                 dr = steps
             elif direction == PlaneTypes.WEST.value:
-                dc = steps
+                dc = -steps
                 dr = 0
             elif direction == PlaneTypes.SOUTH_WEST.value:
                 dc = -steps
@@ -198,7 +198,7 @@ def output_representation_to_moves_and_probabilities(output_representation):
                 dc = steps
                 dr = -steps
             elif direction == PlaneTypes.EAST.value:
-                dc = -steps
+                dc = steps
                 dr = 0
             else:
                 assert direction == PlaneTypes.NORTH_WEST.value
