@@ -82,6 +82,14 @@ def create_win_loss_stats(indices):
     # split into files by board hash + modulo
     stat_dicts = [{} for _ in range(number_of_files)]
     for fen, move_dict in stats.items():
+        board = chess.Board(fen)
+        if not board.turn: # learning, and prediction only occurs on white side, we mirror black to white on both cases
+            board = board.mirror()
+            fen = board.fen()
+            mirror_move_dict = {}
+            for m, s in move_dict.items():
+                mirror_move_dict[move_to_mirror_move(m)] = s
+            move_dict = mirror_move_dict
         hash = board_fen_to_hash(fen)  # make sure fen does not include half moves, full moves or these won't necessarily get the same hash
         index2 = hash % number_of_files
         stat_dicts[index2][fen] = move_dict

@@ -59,8 +59,9 @@ def create_input_output_representation_with_win_probability(path):
         value[current_index] = (float(wins - losses) / played)  # range from -1 to 1
 
         if not b.turn:  # if black's turn then mirror board and moves
-            b = b.mirror()
-            moves = np.array([move_to_mirror_move(m[0]) for m in moves_and_probabilities])
+            raise Exception('data at this point should all be white turn as black turn state have already been mirrored')
+            # b = b.mirror()
+            # moves = np.array([move_to_mirror_move(m[0]) for m in moves_and_probabilities])
         else:
             moves = np.array([m[0] for m in moves_and_probabilities])
         probabilities = np.square(probabilities)  # gives higher probabilities more preference
