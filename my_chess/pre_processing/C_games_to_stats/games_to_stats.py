@@ -12,10 +12,10 @@ from predict import get_input_representation, get_output_representation
 from shared.shared_functionality import board_fen_to_hash, board_fen_to_hash384, position_to_mirror_position, move_to_mirror_move
 from pre_processing.A_Data_Statistics.numer_of_games_in_file import number_of_games
 
-def main(path, number_of_files, cpu_count):
+def main(in_path, out_path, number_of_files, cpu_count):
     data = []
     for i in range(number_of_files):
-        data.append([path, number_of_files, i])
+        data.append([in_path, out_path, number_of_files, i])
     with Pool(cpu_count) as p:
         for _ in tqdm.tqdm(p.imap(create_win_loss_stats, data), total=len(data)):
             pass
@@ -55,14 +55,14 @@ def add_to_stat(stats, result, game):
 
 
 def create_win_loss_stats(indices):
-    path, number_of_files, index1 = indices
+    in_path, out_path, number_of_files, index1 = indices
     failed = total_games = 0
     stats = {}
 
     IN_FILENAME = "caissabase_{}.pgn"
     OUT_FILENAME = "stat{0}_{1}.pkl"
 
-    in_path = os.path.join(path, IN_FILENAME.format(index1))
+    in_path = os.path.join(in_path, IN_FILENAME.format(index1))
     total_games = number_of_games(in_path)
     with open(in_path) as pgn:
         with tqdm.tqdm(total=total_games) as pbar:
@@ -95,7 +95,7 @@ def create_win_loss_stats(indices):
         stat_dicts[index2][fen] = move_dict
 
     for index2 in range(number_of_files):
-        with open(os.path.join(path, OUT_FILENAME.format(index1, index2)), 'wb') as fp:
+        with open(os.path.join(out_path, OUT_FILENAME.format(index1, index2)), 'wb') as fp:
             pickle.dump(stat_dicts[index2], fp)
     print('failed:{0}, processed: {1}, total: {2}'.format(failed,pbar.n, total_games))
     # result int index1 - task index, index2 - hash index
@@ -103,11 +103,12 @@ def create_win_loss_stats(indices):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('path')
+    parser.add_argument('in_path')
+    parser.add_argument('out_path')
     parser.add_argument('-number_of_files', help='number of files to split the pgn into',
                         default=multiprocessing.cpu_count() - 1, type=int)
     parser.add_argument('-cpu-count', help='number of cpus to use. Decrease if RAM blows up.',
                         default=multiprocessing.cpu_count() - 1, type=int)
 
     args = parser.parse_args()
-    main(args.path, args.number_of_files, args.cpu_count)
+    main(args.in_path, args.out_path, args.number_of_files, args.cpu_count)
