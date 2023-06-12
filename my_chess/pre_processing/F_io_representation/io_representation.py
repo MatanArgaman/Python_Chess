@@ -75,7 +75,7 @@ def create_input_output_representation_with_win_probability(path):
             input_arr[..., current_index * INPUT_PLANES:(current_index + 1) * INPUT_PLANES] = get_input_representation(b, 0)
             output_arr[..., current_index * OUTPUT_PLANES:(current_index + 1) * OUTPUT_PLANES] = get_output_representation(moves, probabilities, b)
         except:
-            skipped_boards_representation_error
+            skipped_boards_representation_error += 1
             skipped_boards += 1
             continue
         current_index += 1 # make sure this is the last line in the loop (not continues after it)
