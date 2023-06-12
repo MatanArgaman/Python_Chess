@@ -33,6 +33,9 @@ def create_input_output_representation_with_win_probability(path):
     output_arr = np.zeros([8, 8, OUTPUT_PLANES * len(d.items())], dtype=float)
     value = np.zeros([len(d.items())], dtype=float)
     skipped_boards = 0
+    skipped_boards_no_wins = 0
+    skipped_boards_representation_error = 0
+    skipped_boards_no_probabilities = 0
     current_index = 0
     for i, (fen, item) in enumerate(d.items()):
         b = chess.Board(fen)
@@ -49,10 +52,12 @@ def create_input_output_representation_with_win_probability(path):
 
         played = wins + losses + draws
         if played == 0:
+            skipped_boards_no_wins += 1
             skipped_boards += 1
             continue
         probabilities = np.array([m[1] for m in moves_and_probabilities])
         if probabilities.sum() == 0:
+            skipped_boards_no_probabilities += 1
             skipped_boards += 1
             continue
 
@@ -70,10 +75,15 @@ def create_input_output_representation_with_win_probability(path):
             input_arr[..., current_index * INPUT_PLANES:(current_index + 1) * INPUT_PLANES] = get_input_representation(b, 0)
             output_arr[..., current_index * OUTPUT_PLANES:(current_index + 1) * OUTPUT_PLANES] = get_output_representation(moves, probabilities, b)
         except:
+            skipped_boards_representation_error
             skipped_boards += 1
             continue
         current_index += 1 # make sure this is the last line in the loop (not continues after it)
-    print("skipped {0}/{1}".format(skipped_boards, len(d.items())))
+    print("skipped total {0}/{1}".format(skipped_boards, len(d.items())))
+    print('skipped details:')
+    print("skipped no wins  {0}/{1}".format(skipped_boards_no_wins, len(d.items())))
+    print("skipped no probabilities  {0}/{1}".format(skipped_boards_no_probabilities, len(d.items())))
+    print("skipped representation error {0}/{1}".format(skipped_boards_representation_error, len(d.items())))
     save_results_to_files(path,
                           input_arr[...,:current_index * INPUT_PLANES],
                           output_arr[...,:current_index * OUTPUT_PLANES],
