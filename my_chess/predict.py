@@ -29,7 +29,7 @@ def get_input_representation(board, p1_repetitions):
 
 
     def binary_mask(arr, board, piece, color, mask_index, value):
-        l = np.array(list(board.pieces(piece, color)), dtype=np.int)
+        l = np.array(list(board.pieces(piece, color)), dtype=np.int32)
         l = index_1d_to_indices_2d(l)
         arr[..., mask_index][l] = value
 
