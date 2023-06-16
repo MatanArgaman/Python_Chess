@@ -4,6 +4,7 @@ import numpy as np
 from shared.shared_functionality import *
 import shared
 
+
 # # get a set of player games
 # with open("/home/blacknight/Downloads/Kasparov.pgn") as pgn:
 #     first_game = chess.pgn.read_game(pgn)
@@ -27,7 +28,8 @@ def get_input_representation(board, p1_repetitions):
     :return:
     '''
 
-    assert p1_repetitions==0, "remove this when setting value for both dataset and predict"
+    assert p1_repetitions == 0, "remove this when setting value for both dataset and predict"
+
     def binary_mask(arr, board, piece, color, mask_index, value):
         l = np.array(list(board.pieces(piece, color)), dtype=np.int32)
         l = index_1d_to_indices_2d(l)
@@ -75,7 +77,7 @@ def get_input_representation(board, p1_repetitions):
     if board.has_kingside_castling_rights(chess.BLACK):
         o[7, 4, 17] = 1
     # No progress count 18
-    assert board.halfmove_clock==0, "remove when fixing this in both dataset and predict"
+    assert board.halfmove_clock == 0, "remove when fixing this in both dataset and predict"
     o[..., 15] = board.halfmove_clock
     return o
 
@@ -113,7 +115,7 @@ def get_output_representation(moves, probabilities, board):
         # a number of squares [1..7] in which the piece will be moved,
         # along one of eight relative compass directions {N, NE, E, SE, S, SW, W, N W }
 
-        if (promotion is None) or (promotion==chess.PIECE_SYMBOLS[chess.QUEEN]):
+        if (promotion is None) or (promotion == chess.PIECE_SYMBOLS[chess.QUEEN]):
             piece = str(board.piece_at(start_index_1d)).lower()
             if piece != chess.PIECE_SYMBOLS[chess.KNIGHT]:
                 # queen moves - this include pawn moves which end in promotion to queen
@@ -149,18 +151,20 @@ def get_output_representation(moves, probabilities, board):
         else:
             # under promotions: 3 options (eat diagonally east, eat diagonally west, move up) * promotion options (
             # rock, knight, bishop)
-            assert dr==1
+            assert dr == 1
             pawn_move_options = dc + 1  # moves dc from range -1,2 to range 0,3
             plane_index = TOTAL_QUEEN_MOVES + TOTAL_KNIGHT_MOVES + UNDER_PROMOTIONS.index(promotion) * len(
                 UNDER_PROMOTIONS) + pawn_move_options
         o[start_indices_2d[0], start_indices_2d[1], plane_index] = p
     return o
 
-def sort_moves_and_probabilities(moves,probabilities):
-    order = np.argsort(probabilities)[::-1] # descending order
-    probabilities=probabilities[order]
+
+def sort_moves_and_probabilities(moves, probabilities):
+    order = np.argsort(probabilities)[::-1]  # descending order
+    probabilities = probabilities[order]
     moves = moves[order]
     return moves, probabilities
+
 
 def output_representation_to_moves_and_probabilities(output_representation):
     '''
@@ -177,7 +181,7 @@ def output_representation_to_moves_and_probabilities(output_representation):
     for row, column, plane_index in list(zip(*np.where(o))):
         start_pos = indices_2d_to_position([row, column])
         assert plane_index >= 0
-        promotion=''
+        promotion = ''
         if plane_index < TOTAL_QUEEN_MOVES:
             steps = plane_index // len(PlaneTypes) + 1
             direction = plane_index % len(PlaneTypes)
@@ -212,15 +216,16 @@ def output_representation_to_moves_and_probabilities(output_representation):
             assert plane_index < o.shape[2]
             dr = 1
             under_promotion_index = plane_index - TOTAL_QUEEN_MOVES - TOTAL_KNIGHT_MOVES
-            promotion = UNDER_PROMOTIONS[under_promotion_index//len(UNDER_PROMOTIONS)]
-            dc = (under_promotion_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
-        if 0<=row+dr<ROW_SIZE and 0<=column+dc<ROW_SIZE:
+            promotion = UNDER_PROMOTIONS[under_promotion_index // len(UNDER_PROMOTIONS)]
+            dc = (under_promotion_index % len(UNDER_PROMOTIONS)) - 1  # moves dc from range 0,3 to range -1,2
+        if 0 <= row + dr < ROW_SIZE and 0 <= column + dc < ROW_SIZE:
             end_pos = indices_2d_to_position([row + dr, column + dc])
         else:
-            continue # do not return illegal moves
+            continue  # do not return illegal moves
         moves.append(start_pos + end_pos + promotion)
         probabilities.append(o[row, column, plane_index])
     return np.array(moves), np.array(probabilities)
+
 
 if __name__ == '__main__':
     b = chess.Board()
