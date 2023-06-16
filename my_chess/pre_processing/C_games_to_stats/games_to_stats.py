@@ -46,6 +46,8 @@ def add_to_stat(stats, result, game):
             stat_values['losses'] += white_wins
         stat_values['draws'] += draws
         move_dict[str(m)] = stat_values
+        if m not in board.legal_moves:
+            return False
         try:
             board.push(m)
         except:
@@ -70,15 +72,20 @@ def create_win_loss_stats(indices):
                 pbar.update(1)
                 try:
                     game = chess.pgn.read_game(pgn)
-                    if game is None:
-                        break
-                    result = game.headers['Result']
-                    finished_without_error = add_to_stat(stats, result, game)
-                    if not finished_without_error:
-                        failed += 1
                 except:
                     failed += 1
                     continue
+                if game is None:
+                    break
+                try:
+                    result = game.headers['Result']
+                except:
+                    failed += 1
+                    continue
+                finished_without_error = add_to_stat(stats, result, game)
+                if not finished_without_error:
+                    failed += 1
+
     # split into files by board hash + modulo
     stat_dicts = [{} for _ in range(number_of_files)]
     for fen, move_dict in stats.items():

@@ -27,7 +27,7 @@ def get_input_representation(board, p1_repetitions):
     :return:
     '''
 
-
+    assert p1_repetitions==0, "remove this when setting value for both dataset and predict"
     def binary_mask(arr, board, piece, color, mask_index, value):
         l = np.array(list(board.pieces(piece, color)), dtype=np.int32)
         l = index_1d_to_indices_2d(l)
@@ -61,6 +61,7 @@ def get_input_representation(board, p1_repetitions):
     o[..., 14] = o[..., 14] + p2_color
 
     # total move count 15
+    assert o[..., 15] == 0, "remove when fixing this in both dataset and predict"
     o[..., 15] = board.fullmove_number
 
     # p1 castling 16
@@ -74,6 +75,7 @@ def get_input_representation(board, p1_repetitions):
     if board.has_kingside_castling_rights(chess.BLACK):
         o[7, 4, 17] = 1
     # No progress count 18
+    assert board.halfmove_clock==0, "remove when fixing this in both dataset and predict"
     o[..., 15] = board.halfmove_clock
     return o
 
@@ -208,10 +210,10 @@ def output_representation_to_moves_and_probabilities(output_representation):
             dr, dc = PLANE_INDEX_TO_KNIGHT_MOVES[plane_index - TOTAL_QUEEN_MOVES]
         else:
             assert plane_index < o.shape[2]
-            plane_index = plane_index - TOTAL_QUEEN_MOVES - TOTAL_KNIGHT_MOVES
             dr = 1
-            promotion = UNDER_PROMOTIONS[plane_index//len(UNDER_PROMOTIONS)]
-            dc = (plane_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
+            under_promotion_index = plane_index - TOTAL_QUEEN_MOVES - TOTAL_KNIGHT_MOVES
+            promotion = UNDER_PROMOTIONS[under_promotion_index//len(UNDER_PROMOTIONS)]
+            dc = (under_promotion_index % len(UNDER_PROMOTIONS)) - 1 # moves dc from range 0,3 to range -1,2
         if 0<=row+dr<ROW_SIZE and 0<=column+dc<ROW_SIZE:
             end_pos = indices_2d_to_position([row + dr, column + dc])
         else:
