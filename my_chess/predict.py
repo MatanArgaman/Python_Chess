@@ -63,7 +63,7 @@ def get_input_representation(board, p1_repetitions):
     o[..., 14] = o[..., 14] + p2_color
 
     # total move count 15
-    assert o[..., 15] == 0, "remove when fixing this in both dataset and predict"
+    assert board.fullmove_number == 0, "remove when fixing this in both dataset and predict"
     o[..., 15] = board.fullmove_number
 
     # p1 castling 16

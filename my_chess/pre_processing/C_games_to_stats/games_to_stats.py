@@ -92,6 +92,8 @@ def create_win_loss_stats(indices):
         board = chess.Board(fen)
         if not board.turn: # learning, and prediction only occurs on white side, we mirror black to white on both cases
             board = board.mirror()
+            board.halfmove_clock =0
+            board.fullmove_number=0
             fen = board.fen()
             mirror_move_dict = {}
             for m, s in move_dict.items():
