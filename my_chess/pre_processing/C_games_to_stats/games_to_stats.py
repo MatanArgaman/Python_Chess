@@ -33,6 +33,8 @@ def add_to_stat(stats, result, game):
     elif result == '1/2-1/2':
         draws = 1
     for m in game.mainline_moves():
+        if m not in board.legal_moves:
+            return False
         board.fullmove_number = 0 # todo: make sure to also call this when searching db for moves / nn inference
         board.halfmove_clock = 0
         move_dict = stats.get(board.fen(), {})
@@ -46,8 +48,6 @@ def add_to_stat(stats, result, game):
             stat_values['losses'] += white_wins
         stat_values['draws'] += draws
         move_dict[str(m)] = stat_values
-        if m not in board.legal_moves:
-            return False
         try:
             board.push(m)
         except:
