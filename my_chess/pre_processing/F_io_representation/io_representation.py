@@ -38,7 +38,9 @@ def create_input_output_representation_with_win_probability(path):
     skipped_boards_no_probabilities = 0
     current_index = 0
     for i, (fen, item) in enumerate(d.items()):
+        assert fen.endswith('0'), "remove when fixing this in both dataset and predict"
         b = chess.Board(fen)
+        b.fullmove_number = 0
         moves_and_probabilities = []
         wins = 0
         draws = 0
