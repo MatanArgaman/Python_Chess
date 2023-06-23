@@ -1,7 +1,6 @@
 # example of training the resnet18 model
 from __future__ import print_function, division
 
-from datasets import build_datasets
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,8 +10,7 @@ import os
 import copy
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
-from resnet import MyResNet18ChildSeat
-from squeezenet import MySqueezenet1_1
+from resnet import MyResNet18
 import argparse
 from tqdm import tqdm
 
@@ -142,18 +140,17 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # create a resnet18 instance and load it onto device
-    # model = MyResNet18ChildSeat().to(device)
-    model = MySqueezenet1_1().to(device)
+    model = MyResNet18().to(device)
 
-    # freeze model and only unfreeze last fc layers
-    for param in model.parameters():
-        param.requires_grad = False
-
-    for name, param in model.named_parameters():
-        if ('fc1' in name) or ('classifier.1' in name) or ('features.12' in name) or\
-                ('features.11' in name) or ('features.10' in name) or ('features.9' in name) \
-                or ('features.7' in name):
-            param.requires_grad = True
+    # # freeze model and only unfreeze last fc layers
+    # for param in model.parameters():
+    #     param.requires_grad = False
+    #
+    # for name, param in model.named_parameters():
+    #     if ('fc1' in name) or ('classifier.1' in name) or ('features.12' in name) or\
+    #             ('features.11' in name) or ('features.10' in name) or ('features.9' in name) \
+    #             or ('features.7' in name):
+    #         param.requires_grad = True
 
     # specify loss function for model
     criterion = nn.BCELoss().to(device)

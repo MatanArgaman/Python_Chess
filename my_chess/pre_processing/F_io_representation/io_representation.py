@@ -29,8 +29,8 @@ def create_input_output_representation_with_win_probability(path):
     index1 = m.group(1)
     with open(path, 'rb') as f:
         d = pickle.load(f)
-    input_arr = np.zeros([8, 8, INPUT_PLANES * len(d.items())], dtype=float)
-    output_arr = np.zeros([8, 8, OUTPUT_PLANES * len(d.items())], dtype=float)
+    input_arr = np.zeros([len(d.items()), 8, 8, INPUT_PLANES], dtype=float)
+    output_arr = np.zeros([len(d.items()), 8, 8, OUTPUT_PLANES], dtype=float)
     value = np.zeros([len(d.items())], dtype=float)
     skipped_boards = 0
     skipped_boards_no_wins = 0
@@ -74,8 +74,8 @@ def create_input_output_representation_with_win_probability(path):
         probabilities = np.square(probabilities)  # gives higher probabilities more preference
         probabilities /= probabilities.sum()  # normalize
         try:
-            input_arr[..., current_index * INPUT_PLANES:(current_index + 1) * INPUT_PLANES] = get_input_representation(b, 0)
-            output_arr[..., current_index * OUTPUT_PLANES:(current_index + 1) * OUTPUT_PLANES] = get_output_representation(moves, probabilities, b)
+            input_arr[current_index] = get_input_representation(b, 0)
+            output_arr[current_index] = get_output_representation(moves, probabilities, b)
         except:
             skipped_boards_representation_error += 1
             skipped_boards += 1
@@ -87,11 +87,10 @@ def create_input_output_representation_with_win_probability(path):
     print("skipped no probabilities  {0}/{1}".format(skipped_boards_no_probabilities, len(d.items())))
     print("skipped representation error {0}/{1}".format(skipped_boards_representation_error, len(d.items())))
     save_results_to_files(path,
-                          input_arr[...,:current_index * INPUT_PLANES],
-                          output_arr[...,:current_index * OUTPUT_PLANES],
-                          value[...,:current_index],
+                          input_arr[:current_index],
+                          output_arr[...,:current_index],
+                          value[:current_index],
                           index1)
-
 
 def save_results_to_files(path, input_arr, output_arr, value, index1):
     OUT_FILENAME_INPUT_REPRESENTATION = "estat{0}_i.npz"
@@ -99,8 +98,8 @@ def save_results_to_files(path, input_arr, output_arr, value, index1):
     OUT_FILENAME_OUTPUT_VALUES = "estat{0}_v.npz"
 
     path = os.path.dirname(path)
-    sparse_output_arr = csr_matrix(output_arr.reshape([8, -1]))
-    sparse_input_arr = csr_matrix(input_arr.reshape([8, -1]))
+    sparse_output_arr = csr_matrix(output_arr.reshape([output_arr.shape[0], -1]))
+    sparse_input_arr = csr_matrix(input_arr.reshape([input_arr.shape[0], -1]))
     save_npz(os.path.join(path, OUT_FILENAME_INPUT_REPRESENTATION.format(index1)), sparse_input_arr)
     save_npz(os.path.join(path, OUT_FILENAME_OUTPUT_REPRESENTATION.format(index1)), sparse_output_arr)
     with open(os.path.join(path, OUT_FILENAME_OUTPUT_VALUES.format(index1)), 'wb') as fp:
