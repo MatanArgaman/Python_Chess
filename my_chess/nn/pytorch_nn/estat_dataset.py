@@ -51,7 +51,7 @@ def load_files(root_dir):
 
 
 class Estat_Dataset(Dataset):
-    def __init__(self, split_type, root_dir, seed=5, file_cache_max_size = 2):
+    def __init__(self, split_type, root_dir, seed=5, file_cache_max_size=2):
         np.random.seed(seed)
         self._file_cache_max_size = file_cache_max_size
         self._split_type = split_type
@@ -77,9 +77,9 @@ class Estat_Dataset(Dataset):
             self.files_sample_size_accumulative.append(self.files_sample_size_accumulative[-1] + samples)
         self.files_sample_size_accumulative = np.array(self.files_sample_size_accumulative, dtype=int)
         self.file_cache = {
-            'samples':{},
-            'last_used_file_indices':[]
-                           }
+            'samples': {},
+            'last_used_file_indices': []
+        }
         # samples - keyL file_index, value: {'in': in_npz, 'out': out_npz}
         # last_used_file_indices - list of file_index where self.file_cache['last_used_file_indices'][0] is the least recently used
 
@@ -87,11 +87,13 @@ class Estat_Dataset(Dataset):
         return self.files_sample_size_accumulative[-1]
 
     def __getitem__(self, idx):
-        sample_accumulative_index = np.searchsorted(self.files_sample_size_accumulative, side='left') - 1
+        sample_accumulative_index = np.searchsorted(self.files_sample_size_accumulative, idx, side='left') - 1
+        if idx in self.files_sample_size_accumulative:
+            sample_accumulative_index += 1
         file_index = self.estat_indices[sample_accumulative_index]
 
         if file_index not in self.file_cache['samples']:
-            if len(self.file_cache['last_used_file_indices'])>=self._file_cache_max_size:
+            if len(self.file_cache['last_used_file_indices']) >= self._file_cache_max_size:
                 removed_file_index = self.file_cache['last_used_file_indices'].pop(0)
                 del self.file_cache['samples'][removed_file_index]
 
@@ -99,19 +101,19 @@ class Estat_Dataset(Dataset):
             sample_in = sample_in.reshape(sample_in.shape[0], 8, 8, INPUT_PLANES)
             sample_out = load_npz(self.estat_out[file_index]).toarray()
             sample_out = sample_out.reshape(sample_out.shape[0], 8, 8, OUTPUT_PLANES)
-            self.file_cache['last_used_file_indices'][file_index] = {
+            self.file_cache['samples'][file_index] = {
                 'in': sample_in,
                 'out': sample_out
             }
             self.file_cache['last_used_file_indices'].append(file_index)
 
-        sample_in = self.file_cache['last_used_file_indices'][file_index]['in']
-        sample_out = self.file_cache['last_used_file_indices'][file_index]['out']
+        sample_in = self.file_cache['samples'][file_index]['in']
+        sample_out = self.file_cache['samples'][file_index]['out']
 
         in_file_idx = idx - self.files_sample_size_accumulative[sample_accumulative_index]
 
         result = {
-            'in': sample_in[in_file_idx],
-            'out': sample_out[in_file_idx]
+            'in': sample_in[[in_file_idx]],
+            'out': sample_out[[in_file_idx]]
         }
         return result
