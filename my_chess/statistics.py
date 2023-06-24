@@ -3,7 +3,7 @@ import chess.pgn
 import os
 import pickle
 
-from my_chess.shared.shared_functionality import StatValues
+from shared.shared_functionality import StatValues
 
 
 def create_new_player_stats(stats, player):

@@ -3,14 +3,14 @@ import json
 import os
 import numpy as np
 
-from my_chess.nn.pytorch_nn.estat_dataset import load_files
-from my_chess.shared.shared_functionality import get_config_path
+from nn.pytorch_nn.estat_dataset import load_files
+from shared.shared_functionality import get_config_path
 
 def main(in_dir, seed = 5):
     np.random.seed(seed)
 
     indices, estat_in, estat_out = load_files(in_dir)
-    indices = indices[np.random.permutation(len(indices))]
+    indices = list(indices[np.random.permutation(indices.size)])
     config_path = get_config_path()
     with open(config_path) as fp:
         config = json.load(fp)

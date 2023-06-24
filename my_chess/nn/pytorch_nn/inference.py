@@ -7,7 +7,7 @@ from copy import deepcopy
 import pickle
 import os
 
-from datasets import build_datasets
+from dataloaders import build_dataloaders
 from load_model import load_model
 from utils.shopic_utils import jetson_tensorrt as jetson
 
@@ -92,7 +92,7 @@ def main(model_path, data_dir, intermediate_dir):
     else:
         device = torch.device('cpu')
     model = load_model(model_path, device)
-    image_datasets = build_datasets(data_dir, split_subset=['test'])
+    image_datasets = build_dataloaders(data_dir, split_subset=['test'])
     dataloaders = torch.utils.data.DataLoader(image_datasets['test'], batch_size=BATCH_SIZE,
                                               shuffle=False, num_workers=4)
 

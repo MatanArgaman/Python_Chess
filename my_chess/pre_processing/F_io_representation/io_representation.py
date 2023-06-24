@@ -95,13 +95,19 @@ def create_input_output_representation_with_win_probability(path):
 def save_results_to_files(path, input_arr, output_arr, value, index1):
     OUT_FILENAME_INPUT_REPRESENTATION = "estat{0}_i.npz"
     OUT_FILENAME_OUTPUT_REPRESENTATION = "estat{0}_o.npz"
-    OUT_FILENAME_OUTPUT_VALUES = "estat{0}_v.npz"
+    OUT_FILENAME_OUTPUT_SIZE = "estat{0}_s.pkl"
+    OUT_FILENAME_OUTPUT_VALUES = "estat{0}_v.pkl"
 
     path = os.path.dirname(path)
     sparse_output_arr = csr_matrix(output_arr.reshape([output_arr.shape[0], -1]))
     sparse_input_arr = csr_matrix(input_arr.reshape([input_arr.shape[0], -1]))
     save_npz(os.path.join(path, OUT_FILENAME_INPUT_REPRESENTATION.format(index1)), sparse_input_arr)
     save_npz(os.path.join(path, OUT_FILENAME_OUTPUT_REPRESENTATION.format(index1)), sparse_output_arr)
+
+    samples = input_arr.shape[0]
+    assert input_arr.shape[0] == output_arr.shape[0]
+    with open(os.path.join(path, OUT_FILENAME_OUTPUT_SIZE.format(index1)), 'wb') as fp:
+        pickle.dump(samples, fp)
     with open(os.path.join(path, OUT_FILENAME_OUTPUT_VALUES.format(index1)), 'wb') as fp:
         pickle.dump(value, fp)
 

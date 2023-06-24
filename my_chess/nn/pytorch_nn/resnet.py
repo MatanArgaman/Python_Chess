@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-
+import torch.nn.functional as F
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
-
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -31,12 +30,11 @@ class BatchNorm2dRon(nn.BatchNorm2d):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if torch.isnan(torch.sum(input)):
-            #This is very very weird, we are passing the input.... if the output of the whole netwrk will be nan you should skip the backward pass
+            # This is very very weird, we are passing the input.... if the output of the whole netwrk will be nan you should skip the backward pass
             print(f"Got NaN in input.")
             return input
 
         return super().forward(input)
-
 
 
 class BasicBlock(nn.Module):
@@ -77,11 +75,11 @@ class Bottleneck(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()
         self.conv1 = conv1x1(inplanes, planes)
-        self.bn1 = nn.BatchNorm2d(planes,eps=1e-05)
+        self.bn1 = nn.BatchNorm2d(planes, eps=1e-05)
         self.conv2 = conv3x3(planes, planes, stride)
-        self.bn2 = nn.BatchNorm2d(planes,eps=1e-05)
+        self.bn2 = nn.BatchNorm2d(planes, eps=1e-05)
         self.conv3 = conv1x1(planes, planes * self.expansion)
-        self.bn3 = nn.BatchNorm2d(planes * self.expansion,eps=1e-05)
+        self.bn3 = nn.BatchNorm2d(planes * self.expansion, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
@@ -111,7 +109,7 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, num_classes=1000,skip_last=False,normalize=False):
+    def __init__(self, block, layers, num_classes=1000, skip_last=False, normalize=False):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
@@ -165,15 +163,13 @@ class ResNet(nn.Module):
 
         x = x.view(x.size(0), -1)
         if self.normalize:
-            x = nn.functional.normalize(x, p = 2, dim = 1, eps = 1e-6)
+            x = nn.functional.normalize(x, p=2, dim=1, eps=1e-6)
         if not self.skip_last:
             x = self.fc(x)
             x = nn.functional.normalize(x, p=2, dim=1, eps=1e-6)
 
-        #return x
-        return x, layer3 # to allow head running on top too!!
-
-
+        # return x
+        return x, layer3  # to allow head running on top too!!
 
 
 def resnet18(pretrained=False, **kwargs):
@@ -235,18 +231,22 @@ def resnet152(pretrained=False, **kwargs):
         model.load_state_dict(model_zoo.load_url(model_urls['resnet152']))
     return model
 
+
 class MyResNet18(nn.Module):
     def __init__(self):
         super(MyResNet18, self).__init__()
 
         self.model = resnet18(pretrained=True, skip_last=True, normalize=True)
         self.fc1 = nn.Linear(512, 512)
-
+        self.up = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
+        self.conv2d = nn.Conv2d(8, 64, kernel_size=1, stride=1, padding=1,
+                               bias=False)
     def forward(self, x):
-        x = self.model.conv1(x)
+        x = self.conv2d(x)
         x = self.model.bn1(x)
         x = self.model.relu(x)
-        x = self.model.maxpool(x)
+
+        x = self.up(x)
 
         x = self.model.layer1(x)
         x = self.model.layer2(x)
@@ -257,8 +257,6 @@ class MyResNet18(nn.Module):
         # x = x.view(x.size(0), -1)
         # x = self.fc1(x)
         # x = nn.functional.normalize(x, p=2, dim=1, eps=1e-6)
-        x = x.view(x.size(0), -1)
         x = torch.sigmoid(self.fc1(x))
-
-
+        print('x shape', x.shape)
         return x

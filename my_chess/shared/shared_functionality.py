@@ -172,7 +172,7 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
 
 
 def get_config_path(file_name='config.json'):
-    return os.path.abspath(os.path.join(os.getcwd(), os.pardir, os.pardir, 'configs/', file_name))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'configs/', file_name))
 
 
 def get_nn_io_file(index1, con_train, is_input=True):

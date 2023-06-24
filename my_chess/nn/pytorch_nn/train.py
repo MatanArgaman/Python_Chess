@@ -10,6 +10,8 @@ import os
 import copy
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
+
+from nn.pytorch_nn.dataloaders import build_dataloaders
 from resnet import MyResNet18
 import argparse
 from tqdm import tqdm
@@ -114,27 +116,30 @@ def main():
     # call args in args
     model_path = args.model_path
     model_name = args.model_name
-    DATA_DIR = args.DATA_DIR
+    data_dir = args.data_dir
     tensorboard = args.tensorboard
     log_path = args.log_path
     learning_rate = args.learning_rate
     weight_decay = args.weight_decay
     step_size = args.step_size
     gamma = args.gamma
-    BATCH_SIZE = args.batch_size
+    batch_size = args.batch_size
     num_epochs = args.num_epochs
+    verbose = args.verbose
 
     # start writer for tensorboard (if 'on')
     if tensorboard == 'on':
         writer = SummaryWriter(log_path)
 
     # build dataset, load it onto dataloader, and get relevant information (dataset size, class names)
-    image_datasets = build_datasets(DATA_DIR, split_subset=['train', 'val'])
-    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=BATCH_SIZE,
-                                                  shuffle=True, num_workers=4)
-                   for x in ['train', 'val']}
-    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
-    class_names = image_datasets['train'].classes
+    is_local = torch.cuda.device_count() == 1 # todo: use data parallel
+    loader_name = "base_loader_params"
+    if not is_local:
+        loader_name = "strong_loader_params"
+
+    used_split_types = ['train', 'val']
+    dataloaders = build_dataloaders(data_dir, loader_name, used_split_types, verbose)
+    dataset_sizes = {x: len(dataloaders[x].dataset) for x in used_split_types}
 
     # set device to be either GPU (if available) or CPU (if GPU not available)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -153,7 +158,7 @@ def main():
     #         param.requires_grad = True
 
     # specify loss function for model
-    criterion = nn.BCELoss().to(device)
+    criterion = nn.CrossEntropyLoss().to(device)
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)  # add weight decay here, if needed
@@ -172,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-    parser.add_argument('--DATA_DIR', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/dstat',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='off', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
@@ -182,6 +187,7 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', type=float, default=0.1, help='learning rate decay factor')
     parser.add_argument('--batch_size', type=int, default=20, help='recommended>=32 and not too big.')
     parser.add_argument('--num_epochs', type=int, default=50, help='number of training epochs')
+    parser.add_argument('--verbose', action='store_true')
 
     args = parser.parse_args()
     main()
