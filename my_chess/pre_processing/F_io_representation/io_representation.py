@@ -88,7 +88,7 @@ def create_input_output_representation_with_win_probability(path):
     print("skipped representation error {0}/{1}".format(skipped_boards_representation_error, len(d.items())))
     save_results_to_files(path,
                           input_arr[:current_index],
-                          output_arr[...,:current_index],
+                          output_arr[:current_index],
                           value[:current_index],
                           index1)
 
