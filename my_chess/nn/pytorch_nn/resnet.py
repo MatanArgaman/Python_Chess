@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
-
+from shared.shared_functionality import OUTPUT_PLANES
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
 
@@ -237,7 +237,7 @@ class MyResNet18(nn.Module):
         super(MyResNet18, self).__init__()
 
         self.model = resnet18(pretrained=True, skip_last=True, normalize=True)
-        self.fc1 = nn.Linear(512, 512)
+        self.fc1 = nn.Linear(840, OUTPUT_PLANES)
         self.up = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
         self.conv2d = nn.Conv2d(8, 64, kernel_size=1, stride=1, padding=1,
                                bias=False)
@@ -247,16 +247,16 @@ class MyResNet18(nn.Module):
         x = self.model.relu(x)
 
         x = self.up(x)
-
+        # print('x shape before layer1', x.shape)
         x = self.model.layer1(x)
+        x = self.model.layer1(x)
+        # print('x shape before layer2', x.shape)
         x = self.model.layer2(x)
+        # print('x shape before layer3', x.shape)
         x = self.model.layer3(x)
-        x = self.model.layer4(x)
-        x = self.model.avgpool(x)
 
-        # x = x.view(x.size(0), -1)
-        # x = self.fc1(x)
-        # x = nn.functional.normalize(x, p=2, dim=1, eps=1e-6)
+        x = x.view(x.size(0), 8, 8, -1)
+        # print(f'x shape before fc:{x.shape}')
         x = torch.sigmoid(self.fc1(x))
-        print('x shape', x.shape)
+        # print('x shape', x.shape)
         return x

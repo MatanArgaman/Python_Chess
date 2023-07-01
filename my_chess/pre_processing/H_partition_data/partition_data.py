@@ -38,6 +38,7 @@ def main(in_dir, seed = 5):
     total = 0
     for s, p in zip(split_types, partition_item_count):
         partition[s] = indices[total:total + p]
+        total+=p
 
     with open(out_path, 'w') as fp:
         json.dump(partition,fp, indent=4)

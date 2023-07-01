@@ -67,7 +67,7 @@ class Estat_Dataset(Dataset):
         with open(partition_path) as fp:
             partition = json.load(fp)
         self.estat_indices = indices[[x in partition[split_type] for x in indices]]
-        self.estat_indices = indices[np.random.permutation(self.estat_indices.size)]
+        self.estat_indices = self.estat_indices[np.random.permutation(self.estat_indices.size)]
 
         self.files_sample_size_accumulative = [0]
         for file_index in self.estat_indices:

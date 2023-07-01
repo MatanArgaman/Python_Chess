@@ -42,13 +42,15 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
             if phase == 'train':
                 model.train()  # Set model to training mode
             else:
-                model.eval()  # Set model to evaluate mode
+                with torch.no_grad():
+                    model.eval()  # Set model to evaluate mode
+
 
             running_loss = 0.0
             running_corrects = 0
 
             # Iterate over data.
-            for i, (inputs, labels) in enumerate(dataloaders[phase]):
+            for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
@@ -60,8 +62,6 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
                 with torch.set_grad_enabled(phase == 'train'):
 
                     outputs = model(inputs)
-
-                    labels = labels.unsqueeze(1)
                     loss = criterion(outputs, labels.float())
 
                     # backward + optimize only if in training phase
@@ -75,7 +75,7 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
 
                 # del outputs, loss, labels
                 # torch.cuda.empty_cache()
-
+            print(f'loss: {loss}')
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
 
@@ -177,7 +177,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_small',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='off', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
