@@ -257,6 +257,9 @@ class MyResNet18(nn.Module):
 
         x = x.view(x.size(0), 8, 8, -1)
         # print(f'x shape before fc:{x.shape}')
-        x = torch.sigmoid(self.fc1(x))
+        x = self.fc1(x)
+        s = x.shape
+        x = torch.softmax(x.view([s[0], -1]), dim=1)
+        x = x.view(s)
         # print('x shape', x.shape)
         return x

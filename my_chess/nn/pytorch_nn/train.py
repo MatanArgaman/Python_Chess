@@ -10,6 +10,7 @@ import os
 import copy
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
+import numpy as np
 
 from nn.pytorch_nn.dataloaders import build_dataloaders
 from resnet import MyResNet18
@@ -22,6 +23,82 @@ def binary_accuracy(preds, labels):
     curr_acc = torch.sum(preds.round().long() == labels.data).double()
     res = (curr_acc / float(len(preds)))
     return res.item()
+
+
+def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
+                 writer=None):
+    running_loss = 0.0
+    running_corrects = 0
+
+    # Iterate over data.
+    for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        # zero the parameter gradients
+        optimizer.zero_grad()
+
+        # forward
+        # track history if only in train
+        with torch.set_grad_enabled(phase == 'train'):
+
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+
+            # backward + optimize only if in training phase
+            if phase == 'train':
+                loss.backward()
+                optimizer.step()
+
+        # statistics
+        running_loss += loss.item()  # * inputs.size(0)
+        running_corrects += torch.sum(torch.round(outputs).long() == labels.data).double()
+
+        # del outputs, loss, labels
+        # torch.cuda.empty_cache()
+    print(f'loss: {loss}')
+    epoch_loss = running_loss / dataset_sizes[phase]
+    epoch_acc = running_corrects.double() / dataset_sizes[phase]
+
+    if tensorboard == 'on':
+        writer.add_scalar("Loss/{}".format(phase), epoch_loss, epoch)
+        writer.add_scalar("Acc/{}".format(phase), epoch_acc, epoch)
+
+    if phase == 'val':
+        lr_scheduler.step()  # (metrics=epoch_loss)
+
+    print('{} Loss: {:.4f} Acc: {:.4f}'.format(
+        phase, epoch_loss, epoch_acc))
+    return epoch_acc
+
+
+def val_helper(dataloaders, device, phase, model, top_k=3):
+    epoch_acc = 0.0
+    tp = [0 for _ in range(top_k)]
+    fp = [0 for _ in range(top_k)]
+
+    with torch.no_grad():
+        for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+            inputs = inputs.to(device)
+            l = labels.numpy().reshape([labels.shape[0], -1])
+            labels = labels.to(device)
+            outputs = model(inputs)
+            o = outputs.detach().cpu().numpy()
+            o = o.reshape(o.shape[0], -1)
+            o_order = np.argsort(o, axis=1)
+            l_non_zero_indices = np.array(np.where(l > 0))
+            for j in range(l.shape[0]):
+                for k in range(1, top_k + 1):
+                    l_non_zero_indices = np.where(l[j] > 0)[0]
+                    if set(o_order[j, -k:]).intersection(l_non_zero_indices):
+                        tp[k - 1] += 1
+                    else:
+                        fp[k - 1] += 1
+    print('Val Precision:')
+    for k in range(1, top_k + 1):
+        precision = float(tp[k - 1]) / (tp[k - 1] + fp[k - 1])
+        print(f'k : {k} precision: {round(precision, 3)} ')
+    return epoch_acc
 
 
 def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, model_path,
@@ -41,61 +118,17 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
         for phase in ['train', 'val']:
             if phase == 'train':
                 model.train()  # Set model to training mode
-            else:
+                train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
+                             writer=None)
+            elif phase == 'val':
                 with torch.no_grad():
                     model.eval()  # Set model to evaluate mode
-
-
-            running_loss = 0.0
-            running_corrects = 0
-
-            # Iterate over data.
-            for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-
-                # zero the parameter gradients
-                optimizer.zero_grad()
-
-                # forward
-                # track history if only in train
-                with torch.set_grad_enabled(phase == 'train'):
-
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels.float())
-
-                    # backward + optimize only if in training phase
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
-
-                # statistics
-                running_loss += loss.item()  # * inputs.size(0)
-                running_corrects += torch.sum(torch.round(outputs).long() == labels.data).double()
-
-                # del outputs, loss, labels
-                # torch.cuda.empty_cache()
-            print(f'loss: {loss}')
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects.double() / dataset_sizes[phase]
-
-            if tensorboard == 'on':
-                writer.add_scalar("Loss/{}".format(phase), epoch_loss, epoch)
-                writer.add_scalar("Acc/{}".format(phase), epoch_acc, epoch)
-
-            if phase == 'val':
-                lr_scheduler.step()  # (metrics=epoch_loss)
-
-            print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-                phase, epoch_loss, epoch_acc))
-
-            # deep copy the model
-            if phase == 'val' and epoch_acc > best_acc:
-                best_acc = epoch_acc
-                best_model_wts = copy.deepcopy(model.state_dict())
-                model_filepath = str(folder / 'model_{model_name}_acc{best_acc:.4f}'.format(**vars()))
-                print('saving model: ', model_filepath)
-                torch.save(model.state_dict(), model_filepath)
+                epoch_acc = val_helper(dataloaders, device, phase, model)
+                if epoch_acc > best_acc:
+                    best_model_wts = copy.deepcopy(model.state_dict())
+                    model_filepath = str(folder / 'model_{model_name}_acc{best_acc:.4f}'.format(**vars()))
+                    print('saving model: ', model_filepath)
+                    torch.save(model.state_dict(), model_filepath)
 
         epoch_time = time.time() - epoch_start
         print('Epoch {:.0f}m {:.0f}s'.format(
@@ -111,6 +144,7 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
     model.load_state_dict(best_model_wts)
 
     return model
+
 
 def main():
     # call args in args
@@ -132,7 +166,7 @@ def main():
         writer = SummaryWriter(log_path)
 
     # build dataset, load it onto dataloader, and get relevant information (dataset size, class names)
-    is_local = torch.cuda.device_count() == 1 # todo: use data parallel
+    is_local = torch.cuda.device_count() == 1  # todo: use data parallel
     loader_name = "base_loader_params"
     if not is_local:
         loader_name = "strong_loader_params"
@@ -161,23 +195,25 @@ def main():
     criterion = nn.CrossEntropyLoss().to(device)
 
     # Observe that all parameters are being optimized
-    optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)  # add weight decay here, if needed
+    optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,
+                              weight_decay=weight_decay)  # add weight decay here, if needed
 
     # Decay LR by a factor of 0.1 every 7 epochs
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=step_size, gamma=gamma)
 
     # Train model
-    model = train(model, criterion, optimizer_ft, exp_lr_scheduler, dataloaders, device, dataset_sizes, num_epochs=num_epochs, model_path=model_path, model_name=model_name, tensorboard=tensorboard)
+    model = train(model, criterion, optimizer_ft, exp_lr_scheduler, dataloaders, device, dataset_sizes,
+                  num_epochs=num_epochs, model_path=model_path, model_name=model_name, tensorboard=tensorboard)
+
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--model_path', type=str, default='/home/matan/models/my_models/chess',
                         help='location of model to be used')
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_small',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='off', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
@@ -191,4 +227,3 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main()
-
