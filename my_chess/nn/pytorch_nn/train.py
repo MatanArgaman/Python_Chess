@@ -59,29 +59,30 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
         # del outputs, loss, labels
         # torch.cuda.empty_cache()
 
-    print(f'Last batch loss: {last_loss}')
+    print(f'Last batch loss: {round(last_loss.item(), 5)}')
     epoch_loss = running_loss / len(dataloaders[phase])
 
     if tensorboard == 'on':
-        writer.add_scalar("Avg epoch loss/{}".format(phase), epoch_loss, epoch)
+        writer.add_scalar("Train loss", epoch_loss, epoch)
 
-    if phase == 'val':
-        lr_scheduler.step()  # (metrics=epoch_loss)
-
-    print('{} avg epoch loss: {:.4f}'.format(
-        phase, epoch_loss))
+    print('Train loss: {:.4f}'.format(epoch_loss))
 
 
-def val_helper(dataloaders, device, phase, model, top_k=3):
+def val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch, top_k=3):
     epoch_acc = 0.0
     tp = [0 for _ in range(top_k)]
     fp = [0 for _ in range(top_k)]
 
+    running_loss = 0.0
     with torch.no_grad():
         for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
             inputs = inputs.to(device)
             l = labels.numpy().reshape([labels.shape[0], -1])
-            outputs = torch.softmax(model(inputs), dim=1)  # used with the CrossEntropy Loss
+            labels = labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels.reshape(labels.shape[0], -1))
+            running_loss += loss.item()
+            outputs = torch.softmax(outputs, dim=1)  # used with the CrossEntropy Loss
             o = outputs.detach().cpu().numpy()
             o = o.reshape(o.shape[0], -1)
             o_order = np.argsort(o, axis=1)
@@ -92,15 +93,21 @@ def val_helper(dataloaders, device, phase, model, top_k=3):
                         tp[k - 1] += 1
                     else:
                         fp[k - 1] += 1
+
+    if tensorboard == 'on':
+        epoch_loss = running_loss / len(dataloaders[phase])
+        writer.add_scalar("Val Loss", epoch_loss, epoch)
     print('Val Precision:')
     for k in range(1, top_k + 1):
         precision = float(tp[k - 1]) / (tp[k - 1] + fp[k - 1])
         print(f'k : {k} precision: {round(precision, 3)} ')
+        if tensorboard == 'on':
+            writer.add_scalar(f"Val precision k={k}", precision, epoch)
     return epoch_acc
 
 
 def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, model_path,
-          model_name, tensorboard):
+          model_name, tensorboard, writer):
     since = time.time()
     best_acc = 0.0
 
@@ -117,11 +124,13 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
             if phase == 'train':
                 model.train()  # Set model to training mode
                 train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
-                             writer=None)
+                             writer=writer)
+
             elif phase == 'val':
                 with torch.no_grad():
                     model.eval()  # Set model to evaluate mode
-                epoch_acc = val_helper(dataloaders, device, phase, model)
+                epoch_acc = val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
+                lr_scheduler.step()
                 if epoch_acc > best_acc:
                     best_model_wts = copy.deepcopy(model.state_dict())
                     model_filepath = str(folder / 'model_{model_name}_acc{best_acc:.4f}'.format(**vars()))
@@ -160,6 +169,7 @@ def main():
     verbose = args.verbose
 
     # start writer for tensorboard (if 'on')
+    writer = None
     if tensorboard == 'on':
         writer = SummaryWriter(log_path)
 
@@ -201,7 +211,8 @@ def main():
 
     # Train model
     model = train(model, criterion, optimizer_ft, exp_lr_scheduler, dataloaders, device, dataset_sizes,
-                  num_epochs=num_epochs, model_path=model_path, model_name=model_name, tensorboard=tensorboard)
+                  num_epochs=num_epochs, model_path=model_path, model_name=model_name, tensorboard=tensorboard,
+                  writer=writer)
 
 
 if __name__ == "__main__":
@@ -213,7 +224,7 @@ if __name__ == "__main__":
                         help='name of model to be used')
     parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_100',
                         help='location of folder of images to be trained and validated')
-    parser.add_argument('--tensorboard', type=str, default='off', help='start loss/acc tracking using tensorboard')
+    parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
     parser.add_argument('--learning_rate', type=int, default=0.001, help='value of learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='step size of epochs for learning decay')
