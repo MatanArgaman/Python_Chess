@@ -33,6 +33,7 @@ def build_dataloaders(data_dir, loader_name, used_split_types, verbose=False):
         config = json.load(fp)
     loader_params = config['train']['torch']['data_loader']['base_loader_params']
     loader_params.update(config['train']['torch']['data_loader'][loader_name])
+    print(f'building dataset with params: {json.dumps(loader_params, indent=4)}')
     dl = {}
     for k in used_split_types:
         dl[k] = torch.utils.data.DataLoader(Estat_Dataset(k, data_dir),
