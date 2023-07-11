@@ -52,23 +52,23 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
             if phase == 'train':
                 loss.backward()
                 optimizer.step()
-
+            last_loss = loss
         # statistics
         running_loss += loss.item()  # * inputs.size(0)
 
         # del outputs, loss, labels
         # torch.cuda.empty_cache()
-        last_loss = loss
-    print(f'loss: {last_loss}')
-    epoch_loss = running_loss / dataset_sizes[phase]
+
+    print(f'Last batch loss: {last_loss}')
+    epoch_loss = running_loss / len(dataloaders[phase])
 
     if tensorboard == 'on':
-        writer.add_scalar("Loss/{}".format(phase), epoch_loss, epoch)
+        writer.add_scalar("Avg epoch loss/{}".format(phase), epoch_loss, epoch)
 
     if phase == 'val':
         lr_scheduler.step()  # (metrics=epoch_loss)
 
-    print('{} Loss: {:.4f}'.format(
+    print('{} avg epoch loss: {:.4f}'.format(
         phase, epoch_loss))
 
 
