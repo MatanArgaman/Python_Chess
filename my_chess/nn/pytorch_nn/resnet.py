@@ -259,7 +259,4 @@ class MyResNet18(nn.Module):
         # print(f'x shape before fc:{x.shape}')
         x = self.fc1(x)
         s = x.shape
-        x = torch.softmax(x.view([s[0], -1]), dim=1)
-        x = x.view(s)
-        # print('x shape', x.shape)
-        return x
+        return x.view([s[0], -1])

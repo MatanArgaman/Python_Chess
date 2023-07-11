@@ -30,6 +30,7 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
     running_loss = 0.0
     running_corrects = 0
 
+    last_loss = None
     # Iterate over data.
     for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
         inputs = inputs.to(device)
@@ -43,7 +44,9 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
         with torch.set_grad_enabled(phase == 'train'):
 
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+
+            # CrossEntropy loss is not symmetric, CrossEntropyLoss(B,A) = H(A, softmax(B)) where H is the Cross-Entropy function
+            loss = criterion(outputs, labels.reshape(labels.shape[0], -1))
 
             # backward + optimize only if in training phase
             if phase == 'train':
@@ -52,24 +55,21 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
         # statistics
         running_loss += loss.item()  # * inputs.size(0)
-        running_corrects += torch.sum(torch.round(outputs).long() == labels.data).double()
 
         # del outputs, loss, labels
         # torch.cuda.empty_cache()
-    print(f'loss: {loss}')
+        last_loss = loss
+    print(f'loss: {last_loss}')
     epoch_loss = running_loss / dataset_sizes[phase]
-    epoch_acc = running_corrects.double() / dataset_sizes[phase]
 
     if tensorboard == 'on':
         writer.add_scalar("Loss/{}".format(phase), epoch_loss, epoch)
-        writer.add_scalar("Acc/{}".format(phase), epoch_acc, epoch)
 
     if phase == 'val':
         lr_scheduler.step()  # (metrics=epoch_loss)
 
-    print('{} Loss: {:.4f} Acc: {:.4f}'.format(
-        phase, epoch_loss, epoch_acc))
-    return epoch_acc
+    print('{} Loss: {:.4f}'.format(
+        phase, epoch_loss))
 
 
 def val_helper(dataloaders, device, phase, model, top_k=3):
@@ -81,15 +81,13 @@ def val_helper(dataloaders, device, phase, model, top_k=3):
         for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
             inputs = inputs.to(device)
             l = labels.numpy().reshape([labels.shape[0], -1])
-            labels = labels.to(device)
-            outputs = model(inputs)
+            outputs = torch.softmax(model(inputs), dim=1)  # used with the CrossEntropy Loss
             o = outputs.detach().cpu().numpy()
             o = o.reshape(o.shape[0], -1)
             o_order = np.argsort(o, axis=1)
-            l_non_zero_indices = np.array(np.where(l > 0))
             for j in range(l.shape[0]):
+                l_non_zero_indices = np.where(l[j] > 0)[0]
                 for k in range(1, top_k + 1):
-                    l_non_zero_indices = np.where(l[j] > 0)[0]
                     if set(o_order[j, -k:]).intersection(l_non_zero_indices):
                         tp[k - 1] += 1
                     else:
@@ -192,7 +190,7 @@ def main():
     #         param.requires_grad = True
 
     # specify loss function for model
-    criterion = nn.CrossEntropyLoss().to(device)
+    criterion = nn.CrossEntropyLoss(reduction='mean').to(device)
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,
@@ -217,7 +215,7 @@ if __name__ == "__main__":
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='off', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
-    parser.add_argument('--learning_rate', type=int, default=0.0001, help='value of learning rate')
+    parser.add_argument('--learning_rate', type=int, default=0.001, help='value of learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='step size of epochs for learning decay')
     parser.add_argument('--step_size', type=int, default=10, help='step size of epochs for learning decay')
     parser.add_argument('--gamma', type=float, default=0.1, help='learning rate decay factor')
