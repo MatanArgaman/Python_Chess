@@ -32,7 +32,9 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
     last_loss = None
     # Iterate over data.
+    start_time = time.time()
     for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+        data_time = time.time() - start_time
         inputs = inputs.to(device)
         labels = labels.to(device)
 
@@ -58,6 +60,11 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
         # del outputs, loss, labels
         # torch.cuda.empty_cache()
+        train_time = time.time() - start_time - data_time
+        if tensorboard == 'on':
+            writer.add_scalar("Data Time", data_time, i)
+            writer.add_scalar("Train Time", train_time, i)
+        start_time = time.time()
 
     print(f'Last batch loss: {round(last_loss.item(), 5)}')
     epoch_loss = running_loss / len(dataloaders[phase])
@@ -222,7 +229,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_100',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_small',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
