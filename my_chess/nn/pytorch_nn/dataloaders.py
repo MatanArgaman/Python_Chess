@@ -41,7 +41,8 @@ def build_dataloaders(data_dir, loader_name, used_split_types, verbose=False):
                                             shuffle=loader_params['shuffle'],
                                             num_workers=loader_params['num_workers'],
                                             pin_memory=loader_params['pin_memory'],
-                                            collate_fn=collate_fn
+                                            collate_fn=collate_fn,
+                                            drop_last=True
                                             )
     return dl
 

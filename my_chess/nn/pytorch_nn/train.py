@@ -28,7 +28,6 @@ def binary_accuracy(preds, labels):
 def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
                  writer=None):
     running_loss = 0.0
-    running_corrects = 0
 
     last_loss = None
     # Iterate over data.
@@ -107,6 +106,8 @@ def val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer
     print('Val Precision:')
     for k in range(1, top_k + 1):
         precision = float(tp[k - 1]) / (tp[k - 1] + fp[k - 1])
+        if k == 1:
+            epoch_acc = precision
         print(f'k : {k} precision: {round(precision, 3)} ')
         if tensorboard == 'on':
             writer.add_scalar(f"Val precision k={k}", precision, epoch)
@@ -139,8 +140,9 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
                 epoch_acc = val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
                 lr_scheduler.step()
                 if epoch_acc > best_acc:
+                    best_acc = epoch_acc
                     best_model_wts = copy.deepcopy(model.state_dict())
-                    model_filepath = str(folder / 'model_{model_name}_acc{best_acc:.4f}'.format(**vars()))
+                    model_filepath = str(folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
                     print('saving model: ', model_filepath)
                     torch.save(model.state_dict(), model_filepath)
 
@@ -160,6 +162,13 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
     return model
 
 
+def data_parallel(model):
+    device_count = torch.cuda.device_count()
+    if device_count > 1:
+        return torch.nn.DataParallel(model, device_ids=list(range(device_count)))
+    return model
+
+
 def main():
     # call args in args
     model_path = args.model_path
@@ -174,6 +183,7 @@ def main():
     batch_size = args.batch_size
     num_epochs = args.num_epochs
     verbose = args.verbose
+    load_model = args.load_model
 
     # start writer for tensorboard (if 'on')
     writer = None
@@ -194,20 +204,16 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # create a resnet18 instance and load it onto device
-    model = MyResNet18().to(device)
+    model = data_parallel(MyResNet18()).to(device)
 
-    # # freeze model and only unfreeze last fc layers
-    # for param in model.parameters():
-    #     param.requires_grad = False
-    #
-    # for name, param in model.named_parameters():
-    #     if ('fc1' in name) or ('classifier.1' in name) or ('features.12' in name) or\
-    #             ('features.11' in name) or ('features.10' in name) or ('features.9' in name) \
-    #             or ('features.7' in name):
-    #         param.requires_grad = True
-
-    # specify loss function for model
     criterion = nn.CrossEntropyLoss(reduction='mean').to(device)
+
+    if load_model is not None:
+        model.load_state_dict(torch.load(load_model))
+        print('checking precision of loaded model:')
+        with torch.no_grad():
+            val_helper(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
+        print('continuing to train')
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,
@@ -225,11 +231,13 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--model_path', type=str, default='/home/matan/models/my_models/chess',
-                        help='location of model to be used')
+                        help='location to save models')
+    parser.add_argument('--load_model', type=str, default=None, help='location of model start train from')
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_small',
+
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
