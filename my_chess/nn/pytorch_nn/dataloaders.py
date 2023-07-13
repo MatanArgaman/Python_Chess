@@ -36,9 +36,9 @@ def build_dataloaders(data_dir, loader_name, used_split_types, verbose=False):
     print(f'building dataset with params: {json.dumps(loader_params, indent=4)}')
     dl = {}
     for k in used_split_types:
-        dl[k] = torch.utils.data.DataLoader(Estat_Dataset(k, data_dir),
+        dl[k] = torch.utils.data.DataLoader(Estat_Dataset(k, data_dir, shuffle=loader_params['shuffle']),
                                             batch_size=loader_params['batch_size'],
-                                            shuffle=loader_params['shuffle'],
+                                            shuffle= False, # leave this as False or there will always be cache misses, shuffle is done inside DataLoader - per file
                                             num_workers=loader_params['num_workers'],
                                             pin_memory=loader_params['pin_memory'],
                                             collate_fn=collate_fn,

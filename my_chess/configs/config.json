@@ -20,7 +20,7 @@
     "data_loader": {
       "base_loader_params": {
         "batch_size": 4,
-        "shuffle": false,
+        "shuffle": true,
         "num_workers": 2,
         "pin_memory": true
       },

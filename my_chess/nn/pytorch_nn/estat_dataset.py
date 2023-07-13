@@ -51,10 +51,11 @@ def load_files(root_dir):
 
 
 class Estat_Dataset(Dataset):
-    def __init__(self, split_type, root_dir, seed=5, file_cache_max_size=2):
+    def __init__(self, split_type, root_dir, seed=5, file_cache_max_size=1, shuffle=False):
         np.random.seed(seed)
         self._file_cache_max_size = file_cache_max_size
         self._split_type = split_type
+        self._shuffle = shuffle
         self.root_dir = root_dir
         indices, self.estat_in, self.estat_out = load_files(root_dir)
 
@@ -105,12 +106,16 @@ class Estat_Dataset(Dataset):
                 'in': sample_in,
                 'out': sample_out
             }
+            if self._shuffle: # shuffles the samples within a file (not within the entire dataset)
+                self.file_cache['samples'][file_index]['permutation'] = np.random.permutation(sample_in.shape[0])
             self.file_cache['last_used_file_indices'].append(file_index)
 
         sample_in = self.file_cache['samples'][file_index]['in']
         sample_out = self.file_cache['samples'][file_index]['out']
 
         in_file_idx = idx - self.files_sample_size_accumulative[sample_accumulative_index]
+        if self._shuffle:
+            in_file_idx = self.file_cache['samples'][file_index]['permutation'][in_file_idx]
 
         result = {
             'in': sample_in[[in_file_idx]],
