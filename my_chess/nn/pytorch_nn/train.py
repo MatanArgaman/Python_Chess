@@ -61,8 +61,9 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
         # torch.cuda.empty_cache()
         train_time = time.time() - start_time - data_time
         if tensorboard == 'on':
-            writer.add_scalar("Data Time", data_time, i)
-            writer.add_scalar("Train Time", train_time, i)
+            step = epoch * len(dataloaders[phase]) + i
+            writer.add_scalar("Data Time", data_time, step)
+            writer.add_scalar("Train Time", train_time, step)
         start_time = time.time()
 
     print(f'Last batch loss: {round(last_loss.item(), 5)}')
