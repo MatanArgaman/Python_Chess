@@ -1,39 +1,46 @@
 {
- "train": {
-   "tensorflow": {
-    "input_output_files_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
-    "input_output_files_filename": "estat",
-    "test_index1": 9,
-    "nn_model_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1",
-    "nn_model_function": "policy3",
-    "nn_evaluation_filename": "eval.json",
-    "rounds_between_eval": 50
-   },
-  "torch":
-  {
-    "data_partitioning": {
-     "train": 80,
-     "val": 10,
-     "test": 10
+    "play":
+    {
+        "database": {
+        "file_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
+        "file_name": "dstat"
+        },
+        "network_type": "torch",
+        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/first/model_12_07_23_exp1_epoch_0_acc_0.3402.pth",
+        "tf_nn_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1"
     },
-    "data_partition_filename": "dataset_partition.json",
-    "data_loader": {
-      "base_loader_params": {
-        "batch_size": 4,
-        "shuffle": true,
-        "num_workers": 2,
-        "pin_memory": true
-      },
-      "strong_loader_params":
-      {
-        "batch_size": 40,
-        "num_workers": 10
-      }
+
+    "train": {
+        "tensorflow": {
+        "input_output_files_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
+        "input_output_files_filename": "estat",
+        "test_index1": 9,
+        "nn_model_function": "policy3",
+        "nn_evaluation_filename": "eval.json",
+        "rounds_between_eval": 50
+        },
+
+        "torch":
+        {
+            "data_partitioning": {
+            "train": 80,
+            "val": 10,
+            "test": 10
+            },
+            "data_partition_filename": "dataset_partition.json",
+            "data_loader": {
+                "base_loader_params": {
+                    "batch_size": 4,
+                    "shuffle": true,
+                    "num_workers": 2,
+                    "pin_memory": true
+                },
+                "strong_loader_params":
+                {
+                    "batch_size": 40,
+                    "num_workers": 10
+                }
+            }
+        }
     }
-  }
- },
- "database": {
-  "file_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
-  "file_name": "dstat"
- }
 }

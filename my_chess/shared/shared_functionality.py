@@ -1,3 +1,5 @@
+from __future__ import division, print_function
+
 from collections import namedtuple
 from pathlib import Path
 
@@ -7,8 +9,10 @@ import numpy as np
 import os
 import pickle
 from enum import Enum
-
 from scipy.sparse import load_npz
+import torch
+import logging
+import colorlog
 
 # Constants
 ROW_SIZE = 8
@@ -101,8 +105,10 @@ def board_fen_to_hash384(fen):
     m.update(fen.encode())
     return int.from_bytes(m.digest(), byteorder='little')
 
+
 def get_move_value(v):
     return float(v['wins'] - v['losses']) / (v['wins'] + v['losses'] + v['draws'])
+
 
 def get_fen_moves_and_probabilities(database, board_fen):
     value = database.get(board_fen)
@@ -127,7 +133,7 @@ def get_database_from_file(board_fen, database_path, file_name):
     return database
 
 
-def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
+def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_nn=False, device=None):
     from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
         sort_moves_and_probabilities
     input_representation = np.zeros([len(board_list), 8, 8, INPUT_PLANES])
@@ -135,8 +141,17 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
         board_turn = board.turn
         if not board_turn:
             board = board.mirror()
+        board.halfmove_clock = 0
+        board.fullmove_number = 0
         input_representation[i] = get_input_representation(board, 0)[np.newaxis]
-    output = model.predict(input_representation)
+
+    if is_torch_nn:
+        output = model(torch.tensor(input_representation, dtype=torch.float32).to(device))
+        output = torch.softmax(output, dim=1)
+        output = output.view([output.shape[0], 8, 8, OUTPUT_PLANES])
+        output = output.detach().cpu().numpy()
+    else:
+        output = model.predict(input_representation)
     moves = []
     probabilities = []
     for i in range(output.shape[0]):
@@ -148,7 +163,7 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5):
         if a.size > k_best_moves:
             high = k_best_moves
             low = 0
-            while high-low>1 or a.size> k_best_moves:
+            while high - low > 1 or a.size > k_best_moves:
                 k_best_moves = (low + high) // 2
                 threshold = sorted_o[-k_best_moves]
                 a, b, c = np.where(o >= threshold)
@@ -182,6 +197,44 @@ def get_nn_io_file(index1, con_train, is_input=True):
 
 
 def get_all_train_files_indices(config):
-    paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(config["train"]["input_output_files_filename"] + "*_i.npz")]
+    paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(
+        config["train"]["input_output_files_filename"] + "*_i.npz")]
     indices = [eval(f.split("_")[0].split(config["train"]["input_output_files_filename"])[1]) for f in paths]
     return indices
+
+
+def data_parallel(model):
+    device_count = torch.cuda.device_count()
+    if device_count > 1:
+        return torch.nn.DataParallel(model, device_ids=list(range(device_count)))
+    return model
+
+class SingletonLogger():
+    _loggers = {}
+    def get_logger(self, logger_name):
+        if logger_name in self._loggers:
+            return self._loggers[logger_name]
+
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+
+        # Create a formatter with colors
+        formatter = colorlog.ColoredFormatter(
+            "%(log_color)s%(levelname)s:%(name)s:%(message)s",
+            log_colors={
+                "DEBUG": "cyan",
+                "INFO": "green",
+                "WARNING": "yellow",
+                "ERROR": "red",
+                "CRITICAL": "bold_red",
+            },
+        )
+
+        # Create a console handler and set the formatter
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+
+        # Add the console handler to the logger
+        logger.addHandler(console_handler)
+        SingletonLogger._loggers[logger_name] = logger
+        return logger

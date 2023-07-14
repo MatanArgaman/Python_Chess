@@ -17,6 +17,8 @@ from resnet import MyResNet18
 import argparse
 from tqdm import tqdm
 
+from shared.shared_functionality import data_parallel
+
 
 ## Train model functions
 def binary_accuracy(preds, labels):
@@ -91,7 +93,6 @@ def val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer
             running_loss += loss.item()
             outputs = torch.softmax(outputs, dim=1)  # used with the CrossEntropy Loss
             o = outputs.detach().cpu().numpy()
-            o = o.reshape(o.shape[0], -1)
             o_order = np.argsort(o, axis=1)
             for j in range(l.shape[0]):
                 l_non_zero_indices = np.where(l[j] > 0)[0]
@@ -160,13 +161,6 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
     # load best model weights
     model.load_state_dict(best_model_wts)
 
-    return model
-
-
-def data_parallel(model):
-    device_count = torch.cuda.device_count()
-    if device_count > 1:
-        return torch.nn.DataParallel(model, device_ids=list(range(device_count)))
     return model
 
 

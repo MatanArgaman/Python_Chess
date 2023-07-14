@@ -9,6 +9,7 @@ import json
 import tqdm
 from multiprocessing import Pool
 import multiprocessing
+import logging
 
 from shared.shared_functionality import *
 from shared.shared_functionality import get_nn_moves_and_probabilities
@@ -36,10 +37,12 @@ class MainWindow(QWidget):
         self.widgetSvg.mousePressEvent = self.onclick
         self.human_first_click = True
         self.human_move = ''
-
-        with open(os.path.join(os.getcwd(), 'config.json'), 'r') as f:
+        self.nn_model = None
+        self.device = None
+        self.Log = SingletonLogger().get_logger('play')
+        with open(get_config_path(), 'r') as f:
             self.config = json.load(f)
-
+        self._is_torch_nn = self.config['play']['network_type'] == 'torch'
         self.use_nn = args.nn
         self.use_database = args.database
         self.use_mcts = args.mcts
@@ -96,7 +99,7 @@ class MainWindow(QWidget):
                 index = np.searchsorted(probabilities.cumsum(), np.random.rand(), side='left')
                 return chess.Move.from_uci(moves[index])
             except:
-                pass
+                self.Log
         if self.use_mcts:
             import gc
             MCTS_Node.use_nn = self.use_nn
@@ -106,17 +109,37 @@ class MainWindow(QWidget):
             gc.collect(generation=0)
             return move
         if self.use_nn:
+            device = None
             try:
                 if self.nn_model is None:
-                    from tensorflow import keras
-                    self.nn_model = keras.models.load_model(self.config['train']['nn_model_path'])
+                    if self._is_torch_nn:
+                        import torch
+                        from my_chess.nn.pytorch_nn.resnet import MyResNet18
+                        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+                        self.nn_model = data_parallel(MyResNet18()).to(self.device)
+                        model_state_dict = torch.load(self.config['play']['torch_nn_path'])
+                        renamed_mode_state_dict = {}
+                        for k,v in model_state_dict.items():
+                            renamed_mode_state_dict[k.replace('module.','')] = v
+                        self.nn_model.load_state_dict(renamed_mode_state_dict)
+                        self.nn_model = self.nn_model.to(self.device)
+
+                    elif self.config['play']['network_type']=='tensorflow':
+                        from tensorflow import keras
+                        self.nn_model = keras.models.load_model(self.config['play']['tf_nn_path'])
                 # returns the best k moves
-                moves, _ = get_nn_moves_and_probabilities([self.chessboard.copy()], self.nn_model)[0]
+                moves, probabilities = get_nn_moves_and_probabilities([self.chessboard.copy()],
+                                                          self.nn_model,
+                                                          is_torch_nn=self._is_torch_nn, device=self.device)
+                moves = moves[0] # used batch size 1 so there is only a single array of returned moves.
+                probabilities = probabilities[0]
+                self.Log.debug(f'moves      : {list(moves)}')
+                self.Log.debug(f'probability: {list(probabilities)}')
                 for m in moves:
                     if chess.Move.from_uci(m) in self.chessboard.legal_moves:
                         return chess.Move.from_uci(m)
             except:
-                pass
+                self.Log.warning('error while predicting move, skipping...')
         # if no legal move was generated use alpha beta to find one.
         return alpha_beta_move(self.chessboard)
 
