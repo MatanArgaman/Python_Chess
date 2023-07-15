@@ -40,6 +40,9 @@ class MainWindow(QWidget):
         self.nn_model = None
         self.device = None
         self.Log = SingletonLogger().get_logger('play')
+        self.Log.setLevel(logging.WARNING)
+        if args.debug:
+            self.Log.setLevel(logging.DEBUG)
         with open(get_config_path(), 'r') as f:
             self.config = json.load(f)
         self._is_torch_nn = self.config['play']['network_type'] == 'torch'
@@ -699,6 +702,7 @@ if __name__ == '__main__':
     parser.add_argument('--bhuman', action='store_true')
     parser.add_argument('--whuman', action='store_true')
     parser.add_argument('--database', action='store_true', help='get moves from database if available')
+    parser.add_argument('--debug', action='store_true', help='sets logging level to debug')
     parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
     parser.add_argument('--mcts', action='store_true', help='get moves from monte carlo tree search')
     parser.add_argument('-board', help='start from predefined board (fen), e.g: "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"')
