@@ -199,7 +199,12 @@ def get_nn_io_file(index1, con_train, is_input=True):
 def get_all_train_files_indices(config):
     paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(
         config["train"]["input_output_files_filename"] + "*_i.npz")]
-    indices = [eval(f.split("_")[0].split(config["train"]["input_output_files_filename"])[1]) for f in paths]
+
+    indices =[]
+    for f in paths:
+        filename = os.path.basename(f)
+        index = eval(filename.split("_")[0].split(config["train"]["input_output_files_filename"])[1])
+        indices.append(index)
     return indices
 
 

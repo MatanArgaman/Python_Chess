@@ -11,13 +11,13 @@
     },
 
     "train": {
-        "tensorflow": {
-        "input_output_files_path": "/home/matan/data/mydata/chess/caissabase/pgn/dstat",
+        "input_output_files_path": "/home/matan/data/mydata/chess/caissabase/pgn/estat_100",
         "input_output_files_filename": "estat",
-        "test_index1": 9,
-        "nn_model_function": "policy3",
-        "nn_evaluation_filename": "eval.json",
-        "rounds_between_eval": 50
+        "tensorflow": {
+            "test_index1": 9,
+            "nn_model_function": "policy3",
+            "nn_evaluation_filename": "eval.json",
+            "rounds_between_eval": 50
         },
 
         "torch":

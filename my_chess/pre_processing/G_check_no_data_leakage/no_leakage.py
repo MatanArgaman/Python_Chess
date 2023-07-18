@@ -22,9 +22,9 @@ if __name__ == '__main__':
     ex = set()
     for i in tqdm(file_indices):
         x_train = get_nn_io_file(i,con_train, is_input=True)
-        x_train = x_train.toarray().reshape([8, 8, -1, INPUT_PLANES]).swapaxes(0, 2).swapaxes(1, 2)
+        x_train = x_train.toarray()
         for j in range(x_train.shape[0]):
-            key = x_train[j].tostring()
+            key = x_train[j].tobytes()
             if key in ex:
                 print("data leakage")
             ex.add(key)
