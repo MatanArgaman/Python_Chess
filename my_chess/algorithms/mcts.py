@@ -1,149 +1,126 @@
 import heapq
-import json
-import os
+import random
 import time
 from multiprocessing import Pool
 
 import chess
-import numpy
 import numpy as np
 import tqdm
+from typing import List, Optional
+from shared.shared_functionality import get_nn_moves_and_probabilities, load_pytorch_model, SingletonLogger
 
-from shared.shared_functionality import get_nn_moves_and_probabilities
+LOG = SingletonLogger().get_logger('play')
 
 
 class MCTS_Node:
-    counter = 0
+    counter: int = 0
     use_nn = False
     nn_model = None
 
-    def __init__(self, board, parent_node=None, move=None, depth=0):
+    def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=True):
         MCTS_Node.counter += 1
-        self.won = 0
-        self.played = 0
+        self.won: int = 0
+        self.played: int = 0
         self.parent_node = parent_node
         self.move = move
-        self.capturing_move = False
-        if move is not None:
-            if board.is_capture(move):
-                self.capturing_move = True
         self.board = board.copy()
-        self.explored_moves = set()
-        self.child_ams_heapq = []
-        self.depth = depth
+        self.depth: int = depth
         if move is not None:
             self.board.push(self.move)
-        self.child_nodes = []
-        self.nn_moves = []
-        self.available_capturing_moves = []
-        self.legal_moves = []
+        self.child_nodes: List[MCTS_Node] = []
+        self.legal_moves = set(self.board.legal_moves)
 
-        start_pos_dict = {}
+        if is_calc_all:
+            # calculate capturing moves
+            self.capturing_moves = []
+            start_pos_dict = {}
 
-        for i, m in enumerate(self.board.legal_moves):
-            self.legal_moves.append(m)
-            move_str = str(m)
-            start_pos = move_str[:2]
-            start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [i]
-            if self.board.is_capture(m):
-                self.available_capturing_moves.append(i)
-        self.avoidance_moves = []
+            for i, m in enumerate(self.legal_moves):
+                move_str = str(m)
+                start_pos = move_str[:2]
+                start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [i]
+                if self.board.is_capture(m):
+                    self.capturing_moves.append(i)
 
-        # calculate avoidance move
-        self.board.turn = not self.board.turn
-        for i, m in enumerate(self.board.legal_moves):
-            if self.board.is_capture(m):
-                start_pos = str(m)[2:4]
-                self.avoidance_moves += start_pos_dict.get(start_pos, [])
-        self.board.turn = not self.board.turn
-        self.avoidance_moves = list(set(self.avoidance_moves))
+            # calculate avoidance moves
+            self.avoidance_moves = []
 
+            self.board.turn = not self.board.turn
+            # self.board.legal_moves here is not identical to self.legal_moves as the turn was changed.
+            for i, m in enumerate(self.board.legal_moves):
+                if self.board.is_capture(m):
+                    start_pos = str(m)[2:4]
+                    self.avoidance_moves += start_pos_dict.get(start_pos, [])
+            self.board.turn = not self.board.turn
+            self.avoidance_moves = list(set(self.avoidance_moves))
+
+        # calculate nn best moves
+        self.best_moves: List[str] = []
         if MCTS_Node.nn_model is not None:
-            nn_moves, _ = get_nn_moves_and_probabilities([self.board], MCTS_Node.nn_model, k_best_moves=20)
-            move_list = []
+            nn_moves, _ = get_nn_moves_and_probabilities([self.board], MCTS_Node.nn_model, k_best_moves=10)
             for m in nn_moves[0]:
                 try:
                     m = chess.Move.from_uci(m)
                 except:  # may fail due to illegal move
                     continue
-                move_list.append(m)
-            self.nn_moves = find_matching_index(move_list, self.legal_moves)
+                self.best_moves.append(m)
+
+        if is_calc_all:
+            # create a list of all moves to be considered in the mcts
+            self.ordered_unexplored_moves = self.best_moves
+            best_moves_set = set(self.best_moves)
+            self.ordered_unexplored_moves += list(set(self.avoidance_moves).difference(best_moves_set))
+            self.ordered_unexplored_moves += list(set(self.capturing_moves).difference(best_moves_set))
+
+    def select(self) -> 'MCTS_Node':
+        if self.ordered_unexplored_moves:
+            return self.expand()
+        node: MCTS_Node = self.get_best_child()
+        return node.select()
+
+    def get_best_child(self) -> 'MCTS_Node':
+        best_value: float = float("-inf")
+        best_nodes: List[MCTS_Node] = []
+        for node in self.child_nodes:
+            ams = node.calc_AMS()
+            if ams > best_value:
+                best_nodes = [node]
+            elif ams == best_value:
+                best_nodes.append(node)
+        return random.choice(best_nodes)
+
+    def expand(self) -> 'MCTS_Node':
+        return self.add_new_child(self.ordered_unexplored_moves.pop(0))
 
     @staticmethod
-    def reset_counter():
+    def reset_counter() -> None:
         MCTS_Node.counter = 0
 
-    def win_percentage(self):
+    def win_percentage(self) -> float:
         if self.played > 0:
             return float(self.won) / self.played
         raise Exception("No game played")
 
-    def calc_AMS(self):
+    def calc_AMS(self) -> float:
         assert self.played > 0
         if self.parent_node is None:
             return 1
         exploitation = self.win_percentage()
-        exploration = np.log(self.parent_node.played) / self.played
-        capturing_heuristic = (0.5 if self.capturing_move else 0) / self.played
-        nn_moves_heuristic = 0
-        if self.nn_moves:
-            nn_moves_heuristic += 1.0
-            nn_moves_heuristic /= self.played
-        return exploitation + np.sqrt(2 * exploration + capturing_heuristic + nn_moves_heuristic)
+        exploration = np.sqrt(2 * np.log(self.parent_node.played) / self.played)
+        return exploitation + exploration
 
-    def add_new_child(self, move, move_index):
-        assert self.legal_moves[move_index] == move
-        node = MCTS_Node(self.board, self, move, self.depth + 1)
+    def add_new_child(self, move) -> 'MCTS_Node':
+        assert move in self.legal_moves
+        node = self.create_new_child(move)
         self.child_nodes.append(node)
-        self.explored_moves.add(move_index)
         return node
 
-    def get_child_node(self):
-        '''
-        :return: a child node according to adaptive multi stage sampling
-        '''
-        NEW_NODE_CHANCE = 0.1
-        new_move = False
-        if self.child_nodes:
-            if np.random.rand() <= NEW_NODE_CHANCE:
-                new_move = True
-        else:
-            new_move = True
-        if len(self.legal_moves) == len(self.explored_moves):  # all possible moves where explored
-            new_move = False
-        if new_move:
-            move_index = None
-            unexplored_moves = set()
-            if self.nn_moves:
-                unexplored_moves = set(self.nn_moves).difference(self.explored_moves)
-                if unexplored_moves:
-                    move_index = list(unexplored_moves)[0]
-            if not unexplored_moves:
-                CAPTURING_OR_AVOIDANCE_MOVE_CHANCE = 0.5
-                CAPTURING_MOVE_CHANCE = 0.5
+    def create_new_child(self, move, is_calc_all=True) -> 'MCTS_Node':
+        node = MCTS_Node(self.board, move=move, depth=self.depth + 1, parent_node=self, is_calc_all=is_calc_all)
+        return node
 
-                if self.available_capturing_moves and np.random.rand() <= CAPTURING_OR_AVOIDANCE_MOVE_CHANCE:
-                    if np.random.rand() < CAPTURING_MOVE_CHANCE:
-                        unexplored_moves = set(self.available_capturing_moves).difference(self.explored_moves)
-                    else:
-                        unexplored_moves = set(self.avoidance_moves).difference(self.explored_moves)
-
-            if not unexplored_moves:
-                if np.random.rand() < NEW_NODE_CHANCE or not self.child_nodes:
-                    unexplored_moves = set(np.arange(len(self.legal_moves))).difference(self.explored_moves)
-                else:
-                    child_node = heapq.heappop(self.child_ams_heapq)[2]
-                    return child_node
-            if move_index is None:
-                move_index = list(unexplored_moves)[np.random.randint(len(unexplored_moves))]
-            move = self.legal_moves[move_index]
-            child_node = self.add_new_child(move, move_index)
-        else:
-            child_node = heapq.heappop(self.child_ams_heapq)[2]
-        return child_node
-
-    def update_parent_heap(self):
-        heapq.heappush(self.parent_node.child_ams_heapq, (-self.calc_AMS(), id(self), self))
+    def get_nn_best_move(self) -> str:
+        return self.best_moves[0]
 
 
 def basic_evaluation(board):
@@ -164,7 +141,7 @@ def basic_evaluation(board):
 class Node:
     counter = 0
 
-    def __init__(self, board, alpha, beta, move=None):
+    def __init__(self, board, alpha, beta, parent, move=None):
         Node.counter += 1
         if Node.counter % 1000 == 0:
             print(Node.counter)
@@ -175,16 +152,11 @@ class Node:
         if move is not None:
             self.board.push(self.move)
         self.child_nodes = []
+        self.parent = parent
 
     @staticmethod
     def reset_counter():
         Node.counter = 0
-
-
-def find_matching_index(list1, list2):
-    inverse_index = set(list1)
-    list2_map = dict((m, index) for index, m in enumerate(list2))
-    return [list2_map[item] for item in list1 if item in list2_map]
 
 
 def merge_trees(node1, node2):
@@ -210,55 +182,67 @@ def merge_trees(node1, node2):
 #     print('\n')
 #     b.push(m)
 
+# mcts_process_num = multiprocessing.cpu_count() - 1
+mcts_process_num = 3
 
-def mcts_move(board, max_games=300, max_depth=20, k_best_moves=5):
+
+def mcts_move(board, is_torch_nn, config, max_games=300, max_depth=20, k_best_moves=5):
     global mcts_process_num
-    assert max_depth % 2 == 0, "depth must be an equal number for last move to end in opponenet move"
-    indices = [(board, max_games, max_depth, k_best_moves)] * mcts_process_num
-    first_root = None
-    with Pool(mcts_process_num) as p:
-        for root in tqdm.tqdm(p.imap(mcts_move_helper, indices), total=len(indices)):
-            if first_root is None:
-                first_root = root
-            else:
-                merge_trees(first_root, root)
-
-    root = first_root
+    assert max_depth % 2 == 0, "depth must be an equal number for last move to end in opponent move"
+    indices = [(board, max_games, max_depth, k_best_moves, is_torch_nn, config)] * mcts_process_num
+    parameters = board, max_games, max_depth, k_best_moves, is_torch_nn, config
+    root = mcts_move_helper(parameters)
+    # first_root = None
+    # with Pool(mcts_process_num) as p:
+    #     for root in tqdm.tqdm(p.imap(mcts_move_helper, indices), total=len(indices)):
+    #         if first_root is None:
+    #             first_root = root
+    #         else:
+    #             merge_trees(first_root, root)
+    #
+    # root = first_root
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
-    for item in sorted_nodes:  # debugging
-        print(item[0].move, item[1], item[0].played)
+    for item in sorted_nodes:
+        LOG.debug(item[0].move, item[1], item[0].played)
     k_best_nodes = sorted_nodes[-k_best_moves:][::-1]
     moves = [n[0].move for n in k_best_nodes]
     return moves
 
 
-def mcts_move_helper(parameters):
-    board, max_games, max_depth, k_best_moves = parameters
+def mcts_move_helper(parameters) -> MCTS_Node:
+    board, max_games, max_depth, k_best_moves, is_torch_nn, config = parameters
     start_time = time.time()  # about 24 seconds for a single processor
     start_material_score = basic_evaluation(board)
 
     if MCTS_Node.use_nn and (MCTS_Node.nn_model is None):
-        import tensorflow as tf
-        from tensorflow import keras
-        with open(os.path.join(os.getcwd(), 'config.json'), 'r') as f:
-            config = json.load(f)
-        physical_devices = tf.config.list_physical_devices('GPU')
-        tf.config.experimental.set_memory_growth(
-            physical_devices[0], True
-        )
-        MCTS_Node.nn_model = keras.models.load_model(config['train']['nn_model_path'])
+        if is_torch_nn:
+            MCTS_Node.nn_model = load_pytorch_model(config)
+        else:
+            import tensorflow as tf
+            from tensorflow import keras
+            physical_devices = tf.config.list_physical_devices('GPU')
+            tf.config.experimental.set_memory_growth(
+                physical_devices[0], True
+            )
+            MCTS_Node.nn_model = keras.models.load_model(config['train']['nn_model_path'])
 
     MCTS_Node.reset_counter()
-    root = MCTS_Node(board)
-
+    root: MCTS_Node = MCTS_Node(board)
     while root.played < max_games:
-        node = root
-        game_nodes = [root]
-        while (not is_game_over()) and node.depth < max_depth:
-            node = node.get_child_node()
-            game_nodes.append(node)
 
+        # Selection + Expansion
+        selected_node: MCTS_Node = root.select()
+        if is_game_over(selected_node.board):
+            continue
+
+
+        # simulation
+        node = selected_node
+        while (not is_game_over(node.board)) and node.depth < max_depth:
+            node = node.create_new_child(node.get_nn_best_move(), is_calc_all=False)
+
+        # backpropagation
         if node.board.is_insufficient_material() or node.board.is_stalemate():
             reward = 0.5
         else:
@@ -289,13 +273,14 @@ def mcts_move_helper(parameters):
                         assert node.depth == max_depth
                         reward = get_material_reward(node.board, board.turn, start_material_score)
 
-        for node in game_nodes:
+        node = selected_node
+        while node is not None:
             node.played += 1
             node.won += reward
-            if node.parent_node:
-                node.update_parent_heap()
+            node = node.parent_node
+            reward = 1 - reward
 
-    print('total move time:', time.time() - start_time)
+    LOG.debug('total move time:', time.time() - start_time)
     return root
 
 

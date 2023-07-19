@@ -134,6 +134,10 @@ def get_database_from_file(board_fen, database_path, file_name):
 
 
 def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_nn=False, device=None):
+    """
+    :return: moves, probabilities such that the most probable move is moves[0]
+    """
+
     from predict import get_input_representation, output_representation_to_moves_and_probabilities, \
         sort_moves_and_probabilities
     input_representation = np.zeros([len(board_list), 8, 8, INPUT_PLANES])
@@ -243,3 +247,16 @@ class SingletonLogger():
         logger.addHandler(console_handler)
         SingletonLogger._loggers[logger_name] = logger
         return logger
+
+def load_pytorch_model(config):
+    import torch
+    from my_chess.nn.pytorch_nn.resnet import MyResNet18
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    nn_model = data_parallel(MyResNet18()).to(device)
+    model_state_dict = torch.load(config['play']['torch_nn_path'])
+    renamed_mode_state_dict = {}
+    for k, v in model_state_dict.items():
+        renamed_mode_state_dict[k.replace('module.', '')] = v
+    nn_model.load_state_dict(renamed_mode_state_dict)
+    nn_model = nn_model.to(device)
+    return device, nn_model

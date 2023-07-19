@@ -11,9 +11,6 @@ from algorithms.mcts import MCTS_Node, mcts_move
 from shared.shared_functionality import *
 from shared.shared_functionality import get_nn_moves_and_probabilities
 
-# mcts_process_num = multiprocessing.cpu_count() - 1
-mcts_process_num = 3
-
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -103,7 +100,7 @@ class MainWindow(QWidget):
         if self.use_mcts:
             import gc
             MCTS_Node.use_nn = self.use_nn
-            move = mcts_move(self.chessboard)[0]
+            move = mcts_move(self.chessboard, self._is_torch_nn, self.config)[0]
             gc.collect(generation=2)
             gc.collect(generation=1)
             gc.collect(generation=0)
@@ -112,17 +109,7 @@ class MainWindow(QWidget):
             try:
                 if self.nn_model is None:
                     if self._is_torch_nn:
-                        import torch
-                        from my_chess.nn.pytorch_nn.resnet import MyResNet18
-                        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-                        self.nn_model = data_parallel(MyResNet18()).to(self.device)
-                        model_state_dict = torch.load(self.config['play']['torch_nn_path'])
-                        renamed_mode_state_dict = {}
-                        for k, v in model_state_dict.items():
-                            renamed_mode_state_dict[k.replace('module.', '')] = v
-                        self.nn_model.load_state_dict(renamed_mode_state_dict)
-                        self.nn_model = self.nn_model.to(self.device)
-
+                        self.device, self.nn_model = load_pytorch_model(self.config)
                     elif self.config['play']['network_type'] == 'tensorflow':
                         from tensorflow import keras
                         self.nn_model = keras.models.load_model(self.config['play']['tf_nn_path'])
