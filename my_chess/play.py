@@ -1,3 +1,4 @@
+import os
 import chess.svg
 import time
 import argparse
@@ -5,6 +6,7 @@ from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
 import json
+from datetime import datetime
 
 from algorithms.alpha_beta import alpha_beta_move
 from algorithms.mcts import MCTS_Node, mcts_move
@@ -43,6 +45,10 @@ class MainWindow(QWidget):
         self.use_nn = args.nn
         self.use_database = args.database
         self.use_mcts = args.mcts
+
+        self.save_game_path = os.path.join(os.getcwd(), 'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
+        self.board_move_counter = 0
+        os.makedirs(self.save_game_path)
 
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
@@ -98,12 +104,8 @@ class MainWindow(QWidget):
             except:
                 self.Log
         if self.use_mcts:
-            import gc
             MCTS_Node.use_nn = self.use_nn
             move = mcts_move(self.chessboard, self._is_torch_nn, self.config)[0]
-            gc.collect(generation=2)
-            gc.collect(generation=1)
-            gc.collect(generation=0)
             return move
         if self.use_nn:
             try:
@@ -152,8 +154,14 @@ class MainWindow(QWidget):
                 print('black:', str(move))
 
             self.chessboard.push(move)
+            self.board_move_counter +=1
             self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
             self.widgetSvg.load(self.chessboardSvg)
+
+            # save board image to file
+            imageVar2 = self.widgetSvg.grab(self.widgetSvg.rect())
+            imageVar2.save(os.path.join(self.save_game_path, f'move_{self.board_move_counter}.png'))
+
             if self.chessboard.is_checkmate():
                 if self.chessboard.turn:
                     print('Black Wins')
@@ -202,6 +210,7 @@ class MainWindow(QWidget):
         for i in range(3):
             move = alpha_beta_move(self.chessboard)
             self.chessboard.push(move)
+            print('used alpha beta move')
             self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
             self.widgetSvg.load(self.chessboardSvg)
             self.widgetSvg.update()

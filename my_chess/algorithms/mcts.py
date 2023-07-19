@@ -7,43 +7,48 @@ import chess
 import numpy as np
 import tqdm
 from typing import List, Optional
-from shared.shared_functionality import get_nn_moves_and_probabilities, load_pytorch_model, SingletonLogger
+from shared.shared_functionality import get_nn_moves_and_probabilities, load_pytorch_model, SingletonLogger, \
+    load_tensorflow_model
 
 LOG = SingletonLogger().get_logger('play')
 
 
 class MCTS_Node:
     counter: int = 0
-    use_nn = False
-    nn_model = None
+    use_nn: bool = False
 
-    def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=True):
+    def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=True,
+                 nn_model=None, device: str = None, is_torch_nn: bool = False):
         MCTS_Node.counter += 1
         self.won: int = 0
         self.played: int = 0
-        self.parent_node = parent_node
-        self.move = move
-        self.board = board.copy()
+        self.parent_node: MCTS_Node = parent_node
+        self.move: chess.Move = move
+        self.board: chess.Board = board.copy()
         self.depth: int = depth
+        self.nn_model = nn_model
+        self.device: str = device
+        self.is_torch_nn: bool = is_torch_nn
+        self.counter: int = MCTS_Node.counter
         if move is not None:
             self.board.push(self.move)
         self.child_nodes: List[MCTS_Node] = []
-        self.legal_moves = set(self.board.legal_moves)
+        self.legal_moves: set = set(self.board.legal_moves)
 
         if is_calc_all:
             # calculate capturing moves
-            self.capturing_moves = []
-            start_pos_dict = {}
+            self.capturing_moves: List[chess.Move] = []
+            start_pos_dict: dict = {}
 
             for i, m in enumerate(self.legal_moves):
                 move_str = str(m)
                 start_pos = move_str[:2]
-                start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [i]
+                start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [m]
                 if self.board.is_capture(m):
-                    self.capturing_moves.append(i)
+                    self.capturing_moves.append(m)
 
             # calculate avoidance moves
-            self.avoidance_moves = []
+            self.avoidance_moves: List[chess.Move] = []
 
             self.board.turn = not self.board.turn
             # self.board.legal_moves here is not identical to self.legal_moves as the turn was changed.
@@ -55,22 +60,35 @@ class MCTS_Node:
             self.avoidance_moves = list(set(self.avoidance_moves))
 
         # calculate nn best moves
-        self.best_moves: List[str] = []
-        if MCTS_Node.nn_model is not None:
-            nn_moves, _ = get_nn_moves_and_probabilities([self.board], MCTS_Node.nn_model, k_best_moves=10)
+        self.best_moves: List[chess.Move] = []
+        if MCTS_Node.use_nn is not None:
+            nn_moves, _ = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=10,
+                                                         is_torch_nn=self.is_torch_nn,
+                                                         device=self.device)
             for m in nn_moves[0]:
                 try:
                     m = chess.Move.from_uci(m)
                 except:  # may fail due to illegal move
                     continue
-                self.best_moves.append(m)
+                if m in self.legal_moves:
+                    self.best_moves.append(m)
 
         if is_calc_all:
             # create a list of all moves to be considered in the mcts
-            self.ordered_unexplored_moves = self.best_moves
+            self.ordered_unexplored_moves: List[chess.Move] = self.best_moves
             best_moves_set = set(self.best_moves)
             self.ordered_unexplored_moves += list(set(self.avoidance_moves).difference(best_moves_set))
             self.ordered_unexplored_moves += list(set(self.capturing_moves).difference(best_moves_set))
+            additional_moves = list(self.legal_moves.difference(self.ordered_unexplored_moves))
+            if additional_moves:
+                self.ordered_unexplored_moves += [random.choice(additional_moves)]
+
+        if not self.best_moves:  # heuristic which shouldn't occur. todo: check how can all nn_moves not be legal.
+            if not self.board.is_game_over():
+                if is_calc_all and self.ordered_unexplored_moves:
+                    self.best_moves = [self.ordered_unexplored_moves[0]]
+                else:
+                    self.best_moves = [list(self.legal_moves)[0]]
 
     def select(self) -> 'MCTS_Node':
         if self.ordered_unexplored_moves:
@@ -85,6 +103,7 @@ class MCTS_Node:
             ams = node.calc_AMS()
             if ams > best_value:
                 best_nodes = [node]
+                best_value = ams
             elif ams == best_value:
                 best_nodes.append(node)
         return random.choice(best_nodes)
@@ -102,24 +121,28 @@ class MCTS_Node:
         raise Exception("No game played")
 
     def calc_AMS(self) -> float:
-        assert self.played > 0
+        if self.played <= 0:
+            return float('inf')
         if self.parent_node is None:
             return 1
         exploitation = self.win_percentage()
         exploration = np.sqrt(2 * np.log(self.parent_node.played) / self.played)
         return exploitation + exploration
 
-    def add_new_child(self, move) -> 'MCTS_Node':
+    def add_new_child(self, move: chess.Move) -> 'MCTS_Node':
         assert move in self.legal_moves
         node = self.create_new_child(move)
         self.child_nodes.append(node)
         return node
 
-    def create_new_child(self, move, is_calc_all=True) -> 'MCTS_Node':
-        node = MCTS_Node(self.board, move=move, depth=self.depth + 1, parent_node=self, is_calc_all=is_calc_all)
+    def create_new_child(self, move: chess.Move, is_calc_all: bool = True) -> 'MCTS_Node':
+        node = MCTS_Node(self.board, move=move, depth=self.depth + 1,
+                         parent_node=self, is_calc_all=is_calc_all,
+                         nn_model=self.nn_model, device=self.device,
+                         is_torch_nn=self.is_torch_nn)
         return node
 
-    def get_nn_best_move(self) -> str:
+    def get_nn_best_move(self) -> chess.Move:
         return self.best_moves[0]
 
 
@@ -186,9 +209,8 @@ def merge_trees(node1, node2):
 mcts_process_num = 3
 
 
-def mcts_move(board, is_torch_nn, config, max_games=300, max_depth=20, k_best_moves=5):
+def mcts_move(board, is_torch_nn, config, max_games=1000, max_depth=16, k_best_moves=5):
     global mcts_process_num
-    assert max_depth % 2 == 0, "depth must be an equal number for last move to end in opponent move"
     indices = [(board, max_games, max_depth, k_best_moves, is_torch_nn, config)] * mcts_process_num
     parameters = board, max_games, max_depth, k_best_moves, is_torch_nn, config
     root = mcts_move_helper(parameters)
@@ -210,37 +232,38 @@ def mcts_move(board, is_torch_nn, config, max_games=300, max_depth=20, k_best_mo
     return moves
 
 
+def get_nn_and_device(is_torch_nn, config):
+    if is_torch_nn:
+        return load_pytorch_model(config)
+    else:
+        return load_tensorflow_model(config)
+
+
 def mcts_move_helper(parameters) -> MCTS_Node:
     board, max_games, max_depth, k_best_moves, is_torch_nn, config = parameters
     start_time = time.time()  # about 24 seconds for a single processor
     start_material_score = basic_evaluation(board)
 
-    if MCTS_Node.use_nn and (MCTS_Node.nn_model is None):
-        if is_torch_nn:
-            MCTS_Node.nn_model = load_pytorch_model(config)
-        else:
-            import tensorflow as tf
-            from tensorflow import keras
-            physical_devices = tf.config.list_physical_devices('GPU')
-            tf.config.experimental.set_memory_growth(
-                physical_devices[0], True
-            )
-            MCTS_Node.nn_model = keras.models.load_model(config['train']['nn_model_path'])
-
     MCTS_Node.reset_counter()
-    root: MCTS_Node = MCTS_Node(board)
+    device, nn_model = None, None
+    if MCTS_Node.use_nn:
+        device, nn_model = get_nn_and_device(is_torch_nn, config)
+    root: MCTS_Node = MCTS_Node(board, nn_model=nn_model, device=device, is_torch_nn=is_torch_nn)
+
     while root.played < max_games:
 
         # Selection + Expansion
         selected_node: MCTS_Node = root.select()
+        assert selected_node.depth < max_depth
         if is_game_over(selected_node.board):
             continue
-
 
         # simulation
         node = selected_node
         while (not is_game_over(node.board)) and node.depth < max_depth:
             node = node.create_new_child(node.get_nn_best_move(), is_calc_all=False)
+        if not is_game_over(node.board):
+            assert root.board.turn == node.board.turn, "search should end in the same turn as the current player as the last move should be the opppont's"
 
         # backpropagation
         if node.board.is_insufficient_material() or node.board.is_stalemate():
@@ -278,7 +301,7 @@ def mcts_move_helper(parameters) -> MCTS_Node:
             node.played += 1
             node.won += reward
             node = node.parent_node
-            reward = 1 - reward
+            reward = 1.0 - reward
 
     LOG.debug('total move time:', time.time() - start_time)
     return root
@@ -286,29 +309,26 @@ def mcts_move_helper(parameters) -> MCTS_Node:
 
 def visualize_tree(node, depth=np.inf):
     from graphviz import Digraph
-    dot = Digraph(comment='Alpha Beta graph', format='png')
+    dot = Digraph(comment='Graph', format='png')
+    dot.graph_attr['bgcolor'] = 'cyan'
     dot.node_attr.update(style='filled', fontsize='15', fixedsize='false', fontcolor='blue')
     edges = []
-    node_counter = [0]
 
     def node_to_graph_node(node, dot):
-        dot.node(str(node.counter), 'alpha:{0} beta:{1}, move:{2}'.format(node.alpha, node.beta, str(node.move)),
+        dot.node(str(node.counter),
+                 f'{round(node.won, 2)}/{node.played}\n{node.move}\n{node.counter}\n{round(node.calc_AMS(), 2)}',
                  shape='box' if node.board.turn else 'oval', color='black' if node.board.turn else 'white')
 
-    def helper(node, node_counter, edges, dot, depth):
+    def helper(node, edges, dot, depth):
         if depth <= 0:
             return
         for n in node.child_nodes:
-            n.counter = node_counter[0]
-            node_counter[0] += 1
             node_to_graph_node(n, dot)
             edges.append((str(node.counter), str(n.counter)))
-            helper(n, node_counter, edges, dot, depth - 1)
+            helper(n, edges, dot, depth - 1)
 
-    node.counter = node_counter[0]
     node_to_graph_node(node, dot)
-    node_counter[0] += 1
-    helper(node, node_counter, edges, dot, depth)
+    helper(node, edges, dot, depth)
     dot.edges(edges)
     print(dot.source)
     dot.render('test-output/round-table.gv', view=True)

@@ -38,6 +38,8 @@ def get_input_representation(board, p1_repetitions):
     flipped_board = False
     if not board.turn:  # the board is oriented to the perspective of the current player, color is also flipped s.t white is always the current player
         board = board.mirror()
+        board.fullmove_number = 0
+        board.halfmove_clock = 0
         flipped_board = True
 
     o = np.zeros([8, 8, INPUT_PLANES])
@@ -52,7 +54,7 @@ def get_input_representation(board, p1_repetitions):
     # p1 repetitions from last turn
     o[..., 13] = p1_repetitions
     # p2 repetitions
-    o[..., 13] = 1 if board.is_repetition(count=2) else 0
+    o[..., 13] = 0 # 1 if board.is_repetition(count=2) else 0
     # Color 14
     o[..., 14] = o[..., np.arange(6)].sum(axis=2)
     if flipped_board:
