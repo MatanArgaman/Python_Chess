@@ -73,6 +73,7 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
     if tensorboard == 'on':
         writer.add_scalar("Train loss", epoch_loss, epoch)
+        writer.add_scalar("Train lr", optimizer.param_groups[0]['lr'], epoch)
 
     print('Train loss: {:.4f}'.format(epoch_loss))
 
