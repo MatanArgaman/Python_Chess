@@ -13,6 +13,8 @@ from scipy.sparse import load_npz
 import torch
 import logging
 import colorlog
+import json
+from torch import nn
 
 # Constants
 ROW_SIZE = 8
@@ -193,6 +195,11 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
 def get_config_path(file_name='config.json'):
     return os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'configs/', file_name))
 
+def get_config():
+    config_path = get_config_path()
+    with open(config_path) as fp:
+        return json.load(fp)
+
 
 def get_nn_io_file(index1, con_train, is_input=True):
     return load_npz(os.path.join(con_train['input_output_files_path'],
@@ -260,9 +267,9 @@ def load_tensorflow_model(config):
 
 def load_pytorch_model(config):
     import torch
-    from my_chess.nn.pytorch_nn.resnet import MyResNet18
+    from my_chess.nn.pytorch_nn.resnet import PolicyNetwork
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    nn_model = data_parallel(MyResNet18()).to(device)
+    nn_model = data_parallel(PolicyNetwork()).to(device)
     model_state_dict = torch.load(config['play']['torch_nn_path'])
     renamed_mode_state_dict = {}
     for k, v in model_state_dict.items():
@@ -270,3 +277,87 @@ def load_pytorch_model(config):
     nn_model.load_state_dict(renamed_mode_state_dict)
     nn_model = nn_model.to(device)
     return device, nn_model
+
+
+def get_dataloader(config):
+    from my_chess.nn.pytorch_nn.estat_dataset import Estat_Dataset
+    from my_chess.nn.pytorch_nn.vstat_dataset import Vstat_Dataset
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": Vstat_Dataset,
+        "PolicyNetwork": Estat_Dataset
+    }
+    if network_name in networks:
+        return networks[network_name]
+    raise Exception("network name not available")
+
+
+def get_model(config):
+    from my_chess.nn.pytorch_nn.resnet import ValueNetwork, PolicyNetwork
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": ValueNetwork,
+        "PolicyNetwork": PolicyNetwork
+    }
+    if network_name in networks:
+        return networks[network_name]()
+    raise Exception("network name not available")
+
+def get_criterion(config):
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": nn.MSELoss(reduction='mean'),
+        "PolicyNetwork":  nn.CrossEntropyLoss(reduction='mean')
+    }
+    if network_name in networks:
+        return networks[network_name]
+    raise Exception("network name not available")
+
+def collate_fn_policy_network(data):
+    in_size = 0
+    out_size = 0
+    for item in data:
+        in_size += item['in'].shape[0]
+        out_size += item['out'].shape[0]
+    result = {
+        'in': torch.zeros([in_size, 8, 8, INPUT_PLANES], dtype=torch.float32),
+        'out': torch.zeros([out_size, 8, 8, OUTPUT_PLANES], dtype=torch.float32)
+    }
+    in_index = 0
+    out_index = 0
+    for item in data:
+        result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
+        result['out'][out_index:out_index + item['out'].shape[0]] =  torch.Tensor(item['out'])
+        in_index += item['in'].shape[0]
+        out_index += item['out'].shape[0]
+    return result['in'], result['out']
+
+def collate_fn_value_network(data):
+    in_size = 0
+    out_size = 0
+    for item in data:
+        in_size += item['in'].shape[0]
+        out_size += item['out'].shape[0]
+    result = {
+        'in': torch.zeros([in_size, 8, 8, INPUT_PLANES], dtype=torch.float32),
+        'out': torch.zeros([out_size], dtype=torch.float32)
+    }
+    in_index = 0
+    out_index = 0
+    for item in data:
+        result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
+        result['out'][out_index:out_index + item['out'].shape[0]] = torch.Tensor(item['out'])
+        in_index += item['in'].shape[0]
+        out_index += item['out'].shape[0]
+    return result['in'], result['out']
+
+
+def get_collate_function(config):
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": collate_fn_value_network,
+        "PolicyNetwork":  collate_fn_policy_network
+    }
+    if network_name in networks:
+        return networks[network_name]
+    raise Exception("network name not available")

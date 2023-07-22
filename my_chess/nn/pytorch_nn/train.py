@@ -13,11 +13,10 @@ from pathlib import Path
 import numpy as np
 
 from nn.pytorch_nn.dataloaders import build_dataloaders
-from resnet import MyResNet18
 import argparse
 from tqdm import tqdm
 
-from shared.shared_functionality import data_parallel
+from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion
 
 
 ## Train model functions
@@ -199,10 +198,10 @@ def main():
     # set device to be either GPU (if available) or CPU (if GPU not available)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # create a resnet18 instance and load it onto device
-    model = data_parallel(MyResNet18()).to(device)
+    config = get_config()
+    model = data_parallel(get_model(config)).to(device)
 
-    criterion = nn.CrossEntropyLoss(reduction='mean').to(device)
+    criterion = get_criterion(config).to(device)
 
     if load_model is not None:
         model.load_state_dict(torch.load(load_model))
@@ -233,7 +232,7 @@ if __name__ == "__main__":
                         default='10_09_22_exp1',
                         help='name of model to be used')
 
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/estat_100',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')

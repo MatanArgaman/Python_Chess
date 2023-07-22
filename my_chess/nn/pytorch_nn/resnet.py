@@ -232,9 +232,9 @@ def resnet152(pretrained=False, **kwargs):
     return model
 
 
-class MyResNet18(nn.Module):
+class PolicyNetwork(nn.Module):
     def __init__(self):
-        super(MyResNet18, self).__init__()
+        super(PolicyNetwork, self).__init__()
 
         self.model = resnet18(pretrained=True, skip_last=True, normalize=True)
         self.fc1 = nn.Linear(840, OUTPUT_PLANES)
@@ -260,3 +260,33 @@ class MyResNet18(nn.Module):
         x = self.fc1(x)
         s = x.shape
         return x.view([s[0], -1])
+
+
+class ValueNetwork(nn.Module):
+    def __init__(self):
+        super(ValueNetwork, self).__init__()
+
+        self.model = resnet18(pretrained=True, skip_last=True, normalize=True)
+        self.fc1 = nn.Linear(53760, 1)
+        self.up = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
+        self.conv2d = nn.Conv2d(8, 64, kernel_size=1, stride=1, padding=1,
+                               bias=False)
+    def forward(self, x):
+        x = self.conv2d(x)
+        x = self.model.bn1(x)
+        x = self.model.relu(x)
+
+        x = self.up(x)
+        # print('x shape before layer1', x.shape)
+        x = self.model.layer1(x)
+        x = self.model.layer1(x)
+        # print('x shape before layer2', x.shape)
+        x = self.model.layer2(x)
+        # print('x shape before layer3', x.shape)
+        x = self.model.layer3(x)
+
+        x = x.view(x.size(0), -1)
+        # print(f'x shape before fc:{x.shape}')
+        x = self.fc1(x)
+        #x = torch.clamp(x, -1 , 1) # to be used in the predict/eval
+        return x

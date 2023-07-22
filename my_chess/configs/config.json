@@ -22,6 +22,8 @@
 
         "torch":
         {
+
+            "network_name": "ValueNetwork",
             "data_partitioning": {
             "train": 80,
             "val": 10,

@@ -3,13 +3,16 @@ import json
 import os
 import numpy as np
 
-from nn.pytorch_nn.estat_dataset import load_files
 from shared.shared_functionality import get_config_path
 
-def main(in_dir, seed = 5):
+def main(in_dir, is_vstats=False, seed = 5):
     np.random.seed(seed)
+    if is_vstats:
+        from nn.pytorch_nn.vstat_dataset import load_files
+    else:
+        from nn.pytorch_nn.estat_dataset import load_files
 
-    indices, estat_in, estat_out = load_files(in_dir)
+    indices, stat_in, stat_out = load_files(in_dir)
     indices = list(indices[np.random.permutation(indices.size)])
     config_path = get_config_path()
     with open(config_path) as fp:
@@ -25,14 +28,14 @@ def main(in_dir, seed = 5):
         split_types.append(k)
         percentage += v
         if i == len(data) - 1:
-            remaining = len(estat_in) - total
+            remaining = len(stat_in) - total
             partition_item_count.append(remaining)
         else:
-            n = int(len(estat_in) * (float(v) / 100))
+            n = int(len(stat_in) * (float(v) / 100))
             total += n
             partition_item_count.append(n)
     assert percentage == 100, "percentage percentage should be 100"
-    assert np.sum(partition_item_count) == len(estat_in)
+    assert np.sum(partition_item_count) == len(stat_in)
 
     partition = {}
     total = 0
@@ -46,5 +49,6 @@ def main(in_dir, seed = 5):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('in_dir')
+    parser.add_argument('--is_vstats', action='store_true')
     args = parser.parse_args()
-    main(args.in_dir)
+    main(args.in_dir, args.is_vstats)

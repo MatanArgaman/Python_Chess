@@ -1,30 +1,8 @@
 import json
-import numpy as np
 import torch
 
-from shared.shared_functionality import get_config_path
-from nn.pytorch_nn.estat_dataset import Estat_Dataset
+from shared.shared_functionality import get_config_path, get_dataloader, get_collate_function
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES
-
-
-def collate_fn(data):
-    in_size = 0
-    out_size = 0
-    for item in data:
-        in_size += item['in'].shape[0]
-        out_size += item['out'].shape[0]
-    result = {
-        'in': torch.zeros([in_size, 8, 8, INPUT_PLANES], dtype=torch.float32),
-        'out': torch.zeros([out_size, 8, 8, OUTPUT_PLANES], dtype=torch.float32)
-    }
-    in_index = 0
-    out_index = 0
-    for item in data:
-        result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
-        result['out'][out_index:out_index + item['out'].shape[0]] =  torch.Tensor(item['out'])
-        in_index += item['in'].shape[0]
-        out_index += item['out'].shape[0]
-    return result['in'], result['out']
 
 
 def build_dataloaders(data_dir, loader_name, used_split_types, verbose=False):
@@ -35,13 +13,15 @@ def build_dataloaders(data_dir, loader_name, used_split_types, verbose=False):
     loader_params.update(config['train']['torch']['data_loader'][loader_name])
     print(f'building dataset with params: {json.dumps(loader_params, indent=4)}')
     dl = {}
+    dataloader = get_dataloader(config)
+    collate_function = get_collate_function(config)
     for k in used_split_types:
-        dl[k] = torch.utils.data.DataLoader(Estat_Dataset(k, data_dir, shuffle=loader_params['shuffle']),
+        dl[k] = torch.utils.data.DataLoader(dataloader(k, data_dir, shuffle=loader_params['shuffle']),
                                             batch_size=loader_params['batch_size'],
                                             shuffle= False, # leave this as False or there will always be cache misses, shuffle is done inside DataLoader - per file
                                             num_workers=loader_params['num_workers'],
                                             pin_memory=loader_params['pin_memory'],
-                                            collate_fn=collate_fn,
+                                            collate_fn = collate_function,
                                             drop_last=True
                                             )
     return dl
