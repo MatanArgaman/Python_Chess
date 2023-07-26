@@ -152,10 +152,11 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
         input_representation[i] = get_input_representation(board, 0)[np.newaxis]
 
     if is_torch_nn:
-        output = model(torch.tensor(input_representation, dtype=torch.float32).to(device))
-        output = torch.softmax(output, dim=1)
-        output = output.view([output.shape[0], 8, 8, OUTPUT_PLANES])
-        output = output.detach().cpu().numpy()
+        with torch.no_grad():
+            output = model(torch.tensor(input_representation, dtype=torch.float32).to(device))
+            output = torch.softmax(output, dim=1)
+            output = output.view([output.shape[0], 8, 8, OUTPUT_PLANES])
+            output = output.detach().cpu().numpy()
     else:
         output = model.predict(input_representation)
     moves = []
@@ -195,6 +196,7 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
 def get_config_path(file_name='config.json'):
     return os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, 'configs/', file_name))
 
+
 def get_config():
     config_path = get_config_path()
     with open(config_path) as fp:
@@ -211,7 +213,7 @@ def get_all_train_files_indices(config):
     paths = [str(f) for f in Path(config["train"]["input_output_files_path"]).rglob(
         config["train"]["input_output_files_filename"] + "*_i.npz")]
 
-    indices =[]
+    indices = []
     for f in paths:
         filename = os.path.basename(f)
         index = eval(filename.split("_")[0].split(config["train"]["input_output_files_filename"])[1])
@@ -225,8 +227,10 @@ def data_parallel(model):
         return torch.nn.DataParallel(model, device_ids=list(range(device_count)))
     return model
 
+
 class SingletonLogger():
     _loggers = {}
+
     def get_logger(self, logger_name):
         if logger_name in self._loggers:
             return self._loggers[logger_name]
@@ -255,6 +259,7 @@ class SingletonLogger():
         SingletonLogger._loggers[logger_name] = logger
         return logger
 
+
 def load_tensorflow_model(config):
     import tensorflow as tf
     from tensorflow import keras
@@ -276,6 +281,7 @@ def load_pytorch_model(config):
         renamed_mode_state_dict[k.replace('module.', '')] = v
     nn_model.load_state_dict(renamed_mode_state_dict)
     nn_model = nn_model.to(device)
+    nn_model.eval()
     return device, nn_model
 
 
@@ -303,15 +309,17 @@ def get_model(config):
         return networks[network_name]()
     raise Exception("network name not available")
 
+
 def get_criterion(config):
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": nn.MSELoss(reduction='mean'),
-        "PolicyNetwork":  nn.CrossEntropyLoss(reduction='mean')
+        "PolicyNetwork": nn.CrossEntropyLoss(reduction='mean')
     }
     if network_name in networks:
         return networks[network_name]
     raise Exception("network name not available")
+
 
 def collate_fn_policy_network(data):
     in_size = 0
@@ -327,10 +335,11 @@ def collate_fn_policy_network(data):
     out_index = 0
     for item in data:
         result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
-        result['out'][out_index:out_index + item['out'].shape[0]] =  torch.Tensor(item['out'])
+        result['out'][out_index:out_index + item['out'].shape[0]] = torch.Tensor(item['out'])
         in_index += item['in'].shape[0]
         out_index += item['out'].shape[0]
     return result['in'], result['out']
+
 
 def collate_fn_value_network(data):
     in_size = 0
@@ -356,8 +365,22 @@ def get_collate_function(config):
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": collate_fn_value_network,
-        "PolicyNetwork":  collate_fn_policy_network
+        "PolicyNetwork": collate_fn_policy_network
     }
     if network_name in networks:
         return networks[network_name]
     raise Exception("network name not available")
+
+
+class Outcomes(Enum):
+    LOSE = 0,
+    DRAW = 1,
+    WIN = 2
+
+
+def value_to_outcome(value: np.ndarray) -> np.ndarray:
+    outcomes = np.zeros(value.shape, dtype=np.int32)
+    outcomes[value < (-1.0 / 3)] = Outcomes.LOSE.value
+    outcomes[value > (1.0 / 3)] = Outcomes.WIN.value
+    outcomes[((-1.0 / 3) <= value) & (value <= (1.0 / 3))] = Outcomes.DRAW.value
+    return outcomes

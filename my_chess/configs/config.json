@@ -6,7 +6,7 @@
         "file_name": "dstat"
         },
         "network_type": "torch",
-        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/first/model_12_07_23_exp1_epoch_0_acc_0.3402.pth",
+        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/policy_models/first/model_12_07_23_exp1_epoch_0_acc_0.3402.pth",
         "tf_nn_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1"
     },
 
