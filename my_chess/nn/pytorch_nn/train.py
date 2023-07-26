@@ -11,12 +11,12 @@ import copy
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 import numpy as np
-
-from nn.pytorch_nn.dataloaders import build_dataloaders
+from enum import Enum
 import argparse
 from tqdm import tqdm
+from nn.pytorch_nn.dataloaders import build_dataloaders
 
-from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion
+from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion, value_to_outcome
 
 
 ## Train model functions
@@ -77,7 +77,38 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
     print('Train loss: {:.4f}'.format(epoch_loss))
 
 
-def val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch, top_k=3):
+def val_value_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch):
+    epoch_acc = 0.0
+    tp = 0
+    fp = 0
+    running_loss = 0.0
+    with torch.no_grad():
+        for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+            inputs = inputs.to(device)
+            l = labels.numpy().reshape([labels.shape[0], -1])
+            labels = labels.to(device)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels.reshape(labels.shape[0], -1))
+            running_loss += loss.item()
+            outputs = torch.clamp(outputs, -1.0, 1.0)
+            o = outputs.detach().cpu().numpy()
+
+            # calculate precision
+            # we divide the output space into 3 categories: lose, draw, win
+            l = value_to_outcome(l)
+            o = value_to_outcome(o)
+            tp += ((l == o).sum())
+            fp += ((l != o).sum())
+    epoch_acc = float(tp) / (tp + fp)
+    print(f'Val Precision: {round(epoch_acc, 3)} ')
+    if tensorboard == 'on':
+        epoch_loss = running_loss / len(dataloaders[phase])
+        writer.add_scalar("Val Loss", epoch_loss, epoch)
+        writer.add_scalar("Precision", epoch_acc, epoch)
+    return epoch_acc
+
+
+def val_policy_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch, top_k=3):
     epoch_acc = 0.0
     tp = [0 for _ in range(top_k)]
     fp = [0 for _ in range(top_k)]
@@ -120,7 +151,7 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
           model_name, tensorboard, writer):
     since = time.time()
     best_acc = 0.0
-
+    config = get_config()
     for epoch in range(num_epochs):
         epoch_start = time.time()
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -139,12 +170,14 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
             elif phase == 'val':
                 with torch.no_grad():
                     model.eval()  # Set model to evaluate mode
-                epoch_acc = val_helper(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
+                val_network = get_val_network(config)
+                epoch_acc = val_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
                 lr_scheduler.step()
                 if epoch_acc > best_acc:
                     best_acc = epoch_acc
                     best_model_wts = copy.deepcopy(model.state_dict())
-                    model_filepath = str(folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
+                    model_filepath = str(
+                        folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
                     print('saving model: ', model_filepath)
                     torch.save(model.state_dict(), model_filepath)
 
@@ -162,6 +195,17 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
     model.load_state_dict(best_model_wts)
 
     return model
+
+
+def get_val_network(config):
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": val_value_network,
+        "PolicyNetwork": val_policy_network
+    }
+    if network_name in networks:
+        return networks[network_name]
+    raise Exception("network name not available")
 
 
 def main():
@@ -207,7 +251,8 @@ def main():
         model.load_state_dict(torch.load(load_model))
         print('checking precision of loaded model:')
         with torch.no_grad():
-            val_helper(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
+            val_network = get_val_network(config)
+            val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
         print('continuing to train')
 
     # Observe that all parameters are being optimized
@@ -232,7 +277,7 @@ if __name__ == "__main__":
                         default='10_09_22_exp1',
                         help='name of model to be used')
 
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_100',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_small',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
