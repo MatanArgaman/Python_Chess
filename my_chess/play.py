@@ -153,10 +153,7 @@ class MainWindow(QWidget):
                     self.human_first_click = True
                 print('black:', str(move))
 
-            self.chessboard.push(move)
-            self.board_move_counter +=1
-            self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-            self.widgetSvg.load(self.chessboardSvg)
+            self.move(move)
 
             # save board image to file
             imageVar2 = self.widgetSvg.grab(self.widgetSvg.rect())
@@ -173,14 +170,22 @@ class MainWindow(QWidget):
                 print('Draw - stalemate')
 
         if event.button() == QtCore.Qt.RightButton:  # undo last move
-            self.chessboard.pop()
-            self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-            self.widgetSvg.load(self.chessboardSvg)
+            self.undo_last_move()
         if event.button() == QtCore.Qt.MiddleButton:
             print(self.chessboard.__repr__())
 
+    def undo_last_move(self):
+        self.chessboard.pop()
+        self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
+        self.widgetSvg.load(self.chessboardSvg)
         # self.widgetSvg.update()
         # time.sleep(1)
+
+    def move(self, move: chess.Move):
+        self.chessboard.push(move)
+        self.board_move_counter += 1
+        self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
+        self.widgetSvg.load(self.chessboardSvg)
 
     def get_human_move(self, event):
         SQUARE_START = 40
