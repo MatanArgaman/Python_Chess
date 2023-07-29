@@ -23,7 +23,12 @@
         "torch":
         {
 
-            "network_name": "ValueNetwork",
+            "network_name": "AlphaChessNetwork",
+            "network_heads": ["value_network"],
+            "head_weights": {
+                "value_network": 1,
+                "policy_network": 1
+            },
             "data_partitioning": {
             "train": 80,
             "val": 10,

@@ -291,7 +291,8 @@ def get_dataloader(config):
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": Vstat_Dataset,
-        "PolicyNetwork": Estat_Dataset
+        "PolicyNetwork": Estat_Dataset,
+        "AlphaChessNetwork": Vstat_Dataset  # todo: change to new data + loader
     }
     if network_name in networks:
         return networks[network_name]
@@ -299,11 +300,13 @@ def get_dataloader(config):
 
 
 def get_model(config):
+    from nn.pytorch_nn.AlphaGoChess import get_alpha_chess_model
     from my_chess.nn.pytorch_nn.resnet import ValueNetwork, PolicyNetwork
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": ValueNetwork,
-        "PolicyNetwork": PolicyNetwork
+        "PolicyNetwork": PolicyNetwork,
+        "AlphaChessNetwork": get_alpha_chess_model
     }
     if network_name in networks:
         return networks[network_name]()
@@ -311,10 +314,12 @@ def get_model(config):
 
 
 def get_criterion(config):
+    from nn.pytorch_nn.AlphaGoChess import get_alpha_chess_losses
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": nn.MSELoss(reduction='mean'),
-        "PolicyNetwork": nn.CrossEntropyLoss(reduction='mean')
+        "PolicyNetwork": nn.CrossEntropyLoss(reduction='mean'),
+        "AlphaChessNetwork": get_alpha_chess_losses()
     }
     if network_name in networks:
         return networks[network_name]
@@ -365,7 +370,8 @@ def get_collate_function(config):
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": collate_fn_value_network,
-        "PolicyNetwork": collate_fn_policy_network
+        "PolicyNetwork": collate_fn_policy_network,
+        "AlphaChessNetwork": collate_fn_value_network  # todo: change to new data + loader
     }
     if network_name in networks:
         return networks[network_name]
