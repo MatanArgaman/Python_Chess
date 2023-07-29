@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
 import json
 from datetime import datetime
+from PyQt5.QtCore import QTimer
 
 from algorithms.alpha_beta import alpha_beta_move
 from algorithms.mcts import MCTS_Node, mcts_move
@@ -46,7 +47,7 @@ class MainWindow(QWidget):
         self.use_database = args.database
         self.use_mcts = args.mcts
 
-        self.save_game_path = os.path.join(os.getcwd(), 'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
+        self.save_game_path = os.path.join(os.getcwd(),"games", 'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
         self.board_move_counter = 0
         os.makedirs(self.save_game_path)
 
@@ -140,6 +141,7 @@ class MainWindow(QWidget):
                     if move is None:
                         return
                 else:
+                    return
                     move = self.get_computer_move()
                     self.human_first_click = True
                 print('white:', str(move))
@@ -149,6 +151,7 @@ class MainWindow(QWidget):
                     if move is None:
                         return
                 else:
+                    return
                     move = self.get_computer_move()
                     self.human_first_click = True
                 print('black:', str(move))
@@ -209,17 +212,17 @@ class MainWindow(QWidget):
         return str(row) + str(col)
 
     def play(self):
-        self.widgetSvg.update()
-        self.show()
+        print("played")
+        move = None
+        if self.chessboard.turn:
+            if not args.whuman:
+                move = self.get_computer_move()
+        else:
+            if args.bhuman:
+                move = self.get_computer_move()
+        if move is not None:
+            self.move(move)
         time.sleep(1)
-        for i in range(3):
-            move = alpha_beta_move(self.chessboard)
-            self.chessboard.push(move)
-            print('used alpha beta move')
-            self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-            self.widgetSvg.load(self.chessboardSvg)
-            self.widgetSvg.update()
-            time.sleep(1)
 
 
 if __name__ == '__main__':
