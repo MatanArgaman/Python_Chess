@@ -100,9 +100,10 @@ def val_value_network(dataloaders, device, phase, model, criterion, tensorboard,
             tp += ((l == o).sum())
             fp += ((l != o).sum())
     epoch_acc = float(tp) / (tp + fp)
+    epoch_loss = running_loss / len(dataloaders[phase])
     print(f'Val Precision: {round(epoch_acc, 3)} ')
+    print(f'Val loss: {round(epoch_loss, 3)} ')
     if tensorboard == 'on':
-        epoch_loss = running_loss / len(dataloaders[phase])
         writer.add_scalar("Val Loss", epoch_loss, epoch)
         writer.add_scalar("Precision", epoch_acc, epoch)
     return epoch_acc
