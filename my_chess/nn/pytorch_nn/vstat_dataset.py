@@ -116,8 +116,12 @@ class Vstat_Dataset(Dataset):
         if self._shuffle:
             in_file_idx = self.file_cache['samples'][file_index]['permutation'][in_file_idx]
 
+        # swap axes explanation:
+        # nn.conv2d filter works expected batch_size, in_planes, ....
+        # since out data is current [batch_size, 8,8, IN_PLANES] we want to switch order so the convolutions will
+        # work on a a [8, 8] array and not [8 , IN_PLANES] array.
         result = {
-            'in': sample_in[[in_file_idx]],
+            'in': sample_in[[in_file_idx]].swapaxes(1,3).swapaxes(2,3),
             'out': sample_out[[in_file_idx]]
         }
         return result

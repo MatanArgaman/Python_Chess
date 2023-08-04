@@ -1,5 +1,6 @@
 from typing import List, Dict
 
+import torch
 import torch.nn as nn
 
 from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES, SingletonLogger, get_config
@@ -48,17 +49,17 @@ class BasicAlphaChessBlock(nn.Module):
 class AlphaChessBody(nn.Module):
     def __init__(self):
         super(AlphaChessBody, self).__init__()
-        self.block = BasicAlphaChessBlock(256, 256, 1)
+        self.blocks = nn.Sequential(*[BasicAlphaChessBlock(256, 256, 1) for _ in range(19)])
         self.conv1 = conv3x3(INPUT_PLANES, 256, 1)
         self.bn1 = nn.BatchNorm2d(256, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
+
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        for _ in range(19):
-            x = self.block(x)
+        x = self.blocks(x)
         return x
 
 
@@ -104,15 +105,32 @@ class AlphaChessComplete(nn.Module):
             'policy_network': AlphaChessHeadPolicy,
             'value_network': AlphaChessHeadValue
         }
-        self.body = AlphaChessBody()
-        self.heads = heads
-        self.head_weights = head_weights
+        self.body: nn.Module = AlphaChessBody()
+        self.heads: List[str] = heads
+        self.head_weights: Dict[str, int] = head_weights
+        self.head_outputs: Dict[str, torch.Tensor] = {}
+        self.head_networks: Dict[str, nn.Module] = {}
+        for head in self.heads:
+            if head in self.head_weights and self.head_weights[head] != 0:
+                self.head_networks[head] = self.head_dict[head]()
+
+    def set_train_mode(self):
+        self.train()
+        self.body.train()
+        for head in self.heads:
+            self.head_networks[head].train()
+
+    def set_eval_mode(self):
+        self.eval()
+        self.body.eval()
+        for head in self.heads:
+            self.head_networks[head].eval()
 
     def forward(self, x):
         x = self.body(x)
         for head in self.heads:
             if head in self.head_weights and self.head_weights[head] != 0:
-                setattr(self, head, self.head_dict[head]()(x))
+                self.head_outputs[head] = self.head_networks[head](x)
             else:
                 LOG.warning(f'dropping head {head}')
         return self
@@ -130,11 +148,10 @@ class AlphaChessLoss(nn.Module):
 
     def forward(self, model, labels):
         losses = {head: 0 for head in self.heads}
-        d = model.__dict__
         losses['tot'] = 0
         for head in self.heads:
-            if head in d:
-                losses[head] = self.loss_dict[head](d[head], labels)
+            if head in model.head_networks:
+                losses[head] = self.loss_dict[head](model.head_outputs[head], labels)
                 losses['tot'] += self.head_weights[head] * losses[head]
         return losses['tot']  # , losses
 

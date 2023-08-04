@@ -95,18 +95,18 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
             inputs = inputs.to(device)
             l = labels.numpy().reshape([labels.shape[0], -1])
             labels = labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels.reshape(labels.shape[0], -1))
+            model(inputs)
+            loss = criterion(model, labels.reshape(labels.shape[0], -1))
             for head in model.heads:
                 running_loss[head] += loss.item() #todo: use loss per head
                 # todo: apply torch.softmax on policy head
-                o = outputs.__dict__[head].detach().cpu().numpy()
+                o = model.head_outputs[head].detach().cpu().numpy()
                 # calculate precision
                 # we divide the output space into 3 categories: lose, draw, win
-                l = value_to_outcome(l)
-                o = value_to_outcome(o)
-                tp[head] += ((l == o).sum())
-                fp[head] += ((l != o).sum())
+                l2 = value_to_outcome(l)
+                o2 = value_to_outcome(o)
+                tp[head] += ((l2 == o2).sum())
+                fp[head] += ((l2 != o2).sum())
     for head in model.heads:
         epoch_acc[head] = float(tp[head]) / (tp[head] + fp[head])
         epoch_loss[head] = running_loss[head] / len(dataloaders[phase])
@@ -190,6 +190,18 @@ def val_policy_network(dataloaders, device, phase, model, criterion, tensorboard
     return epoch_acc
 
 
+def set_model_train(model):
+    if hasattr(model, 'heads'):
+        model.set_train_mode()
+    else:
+        model.train()  # Set model to training mode
+
+def set_model_eval(model):
+    if hasattr(model, 'heads'):
+        model.set_eval_mode()
+    else:
+        model.eval()  # Set model to training mode
+
 def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, model_path,
           model_name, tensorboard, writer):
     since = time.time()
@@ -206,23 +218,25 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
-                model.train()  # Set model to training mode
+
+                set_model_train(model)
+
                 train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
                              writer=writer)
 
             elif phase == 'val':
                 with torch.no_grad():
-                    model.eval()  # Set model to evaluate mode
+                    set_model_eval(model)
                 val_network = get_val_network(config)
                 epoch_acc = val_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
                 lr_scheduler.step()
-                if epoch_acc > best_acc:
-                    best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(model.state_dict())
-                    model_filepath = str(
-                        folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
-                    print('saving model: ', model_filepath)
-                    torch.save(model.state_dict(), model_filepath)
+                # if epoch_acc > best_acc:
+                #     best_acc = epoch_acc
+                #     best_model_wts = copy.deepcopy(model.state_dict())
+                #     model_filepath = str(
+                #         folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
+                #     print('saving model: ', model_filepath)
+                #     torch.save(model.state_dict(), model_filepath)
 
         epoch_time = time.time() - epoch_start
         print('Epoch {:.0f}m {:.0f}s'.format(
@@ -287,8 +301,12 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     config = get_config()
-    model = data_parallel(get_model(config)).to(device)
-
+    model = get_model(config)
+    model = data_parallel(model).to(device)
+    if hasattr(model, 'heads'):
+        data_parallel(model.body).to(device)
+        for head in model.heads:
+            data_parallel(model.head_networks[head]).to(device)
     criterion = get_criterion(config).to(device)
 
     if load_model is not None:
@@ -321,7 +339,7 @@ if __name__ == "__main__":
                         default='10_09_22_exp1',
                         help='name of model to be used')
 
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_small',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')

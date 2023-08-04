@@ -353,7 +353,7 @@ def collate_fn_value_network(data):
         in_size += item['in'].shape[0]
         out_size += item['out'].shape[0]
     result = {
-        'in': torch.zeros([in_size, 8, 8, INPUT_PLANES], dtype=torch.float32),
+        'in': torch.zeros([in_size, INPUT_PLANES, 8, 8], dtype=torch.float32),
         'out': torch.zeros([out_size], dtype=torch.float32)
     }
     in_index = 0
