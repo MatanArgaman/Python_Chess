@@ -1,7 +1,7 @@
 # example of training the resnet18 model
 from __future__ import print_function, division
 
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
@@ -16,6 +16,10 @@ import numpy as np
 from enum import Enum
 import argparse
 from tqdm import tqdm
+
+from nn.pytorch_nn.AlphaChess import ValAccuracyBase
+from nn.pytorch_nn.AlphaChess.ValAccuracyPolicy import AlphaValPolicy
+from nn.pytorch_nn.AlphaChess.ValAccuracyValue import AlphaValValue
 from nn.pytorch_nn.dataloaders import build_dataloaders
 
 from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion, value_to_outcome
@@ -80,15 +84,20 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
 
 def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch):
+    val_per_head_functions: Dict[str, ValAccuracyBase] = {
+        'value_network': AlphaValValue,
+        'policy_network': AlphaValPolicy,
+    }
+
+    alpha_val: Dict[str, ValAccuracyBase] = dict([(head, val_accuracy(writer, tensorboard, epoch)) for
+                                                  head, val_accuracy in val_per_head_functions.items()
+                                                  if head in model.heads])
     epoch_acc: Dict[str, float] = {}
-    tp: Dict[str, float] = {}
-    fp: Dict[str, float] = {}
     running_loss: Dict[str, float] = {}
     epoch_loss: Dict[str, float] = {}
+
     for head in model.heads:
         epoch_acc[head] = 0.0
-        tp[head] = 0.0
-        fp[head] = 0.0
         running_loss[head] = 0.0
     with torch.no_grad():
         for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
@@ -98,24 +107,19 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
             model(inputs)
             loss = criterion(model, labels.reshape(labels.shape[0], -1))
             for head in model.heads:
-                running_loss[head] += loss.item() #todo: use loss per head
+                running_loss[head] += loss.item()  # todo: use loss per head
                 # todo: apply torch.softmax on policy head
                 o = model.head_outputs[head].detach().cpu().numpy()
                 # calculate precision
                 # we divide the output space into 3 categories: lose, draw, win
-                l2 = value_to_outcome(l)
-                o2 = value_to_outcome(o)
-                tp[head] += ((l2 == o2).sum())
-                fp[head] += ((l2 != o2).sum())
+                alpha_val[head].update_accuracy_from_batch(l, o)
+
     for head in model.heads:
-        epoch_acc[head] = float(tp[head]) / (tp[head] + fp[head])
+        alpha_val[head].print_and_log_accuracy()
         epoch_loss[head] = running_loss[head] / len(dataloaders[phase])
-        print(f'Val Precision: {round(epoch_acc[head], 3)} ')
         print(f'Val loss: {round(epoch_loss[head], 3)} ')
-    if tensorboard == 'on':
-        for head in model.heads:
+        if tensorboard == 'on':
             writer.add_scalar(f'Val Loss {head}', epoch_loss[head], epoch)
-            writer.add_scalar(f'Val Precision {head}', epoch_acc[head], epoch)
     return epoch_acc
 
 
@@ -196,11 +200,13 @@ def set_model_train(model):
     else:
         model.train()  # Set model to training mode
 
+
 def set_model_eval(model):
     if hasattr(model, 'heads'):
         model.set_eval_mode()
     else:
         model.eval()  # Set model to training mode
+
 
 def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, model_path,
           model_name, tensorboard, writer):

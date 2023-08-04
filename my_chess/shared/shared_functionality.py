@@ -4,7 +4,6 @@ from collections import namedtuple
 from pathlib import Path
 
 import chess
-import numpy
 import numpy as np
 import os
 import pickle
@@ -300,7 +299,7 @@ def get_dataloader(config):
 
 
 def get_model(config):
-    from nn.pytorch_nn.AlphaGoChess import get_alpha_chess_model
+    from nn.pytorch_nn.AlphaChess.AlphaGoChess import get_alpha_chess_model
     from my_chess.nn.pytorch_nn.resnet import ValueNetwork, PolicyNetwork
     network_name = config['train']['torch']['network_name']
     networks = {
@@ -314,7 +313,7 @@ def get_model(config):
 
 
 def get_criterion(config):
-    from nn.pytorch_nn.AlphaGoChess import get_alpha_chess_losses
+    from nn.pytorch_nn.AlphaChess.AlphaGoChess import get_alpha_chess_losses
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": nn.MSELoss(reduction='mean'),
