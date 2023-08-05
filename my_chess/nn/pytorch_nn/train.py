@@ -20,7 +20,7 @@ from tqdm import tqdm
 from nn.pytorch_nn.AlphaChess import ValAccuracyBase
 from nn.pytorch_nn.AlphaChess.ValAccuracyPolicy import AlphaValPolicy
 from nn.pytorch_nn.AlphaChess.ValAccuracyValue import AlphaValValue
-from nn.pytorch_nn.dataloaders import build_dataloaders
+from nn.pytorch_nn.data_loading.dataloaders import build_dataloaders
 
 from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion, value_to_outcome
 

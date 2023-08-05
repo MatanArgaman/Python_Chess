@@ -7,7 +7,7 @@ from copy import deepcopy
 import pickle
 import os
 
-from dataloaders import build_dataloaders
+from nn.pytorch_nn.data_loading.dataloaders import build_dataloaders
 from load_model import load_model
 from utils.shopic_utils import jetson_tensorrt as jetson
 

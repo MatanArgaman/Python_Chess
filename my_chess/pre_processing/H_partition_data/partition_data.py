@@ -8,9 +8,9 @@ from shared.shared_functionality import get_config_path
 def main(in_dir, is_vstats=False, seed = 5):
     np.random.seed(seed)
     if is_vstats:
-        from nn.pytorch_nn.vstat_dataset import load_files
+        from nn.pytorch_nn.data_loading.vstat_dataset import load_files
     else:
-        from nn.pytorch_nn.estat_dataset import load_files
+        from nn.pytorch_nn.data_loading.estat_dataset import load_files
 
     indices, stat_in, stat_out = load_files(in_dir)
     indices = list(indices[np.random.permutation(indices.size)])

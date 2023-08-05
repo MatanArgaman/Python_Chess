@@ -285,8 +285,8 @@ def load_pytorch_model(config):
 
 
 def get_dataloader(config):
-    from my_chess.nn.pytorch_nn.estat_dataset import Estat_Dataset
-    from my_chess.nn.pytorch_nn.vstat_dataset import Vstat_Dataset
+    from nn.pytorch_nn.data_loading.estat_dataset import Estat_Dataset
+    from nn.pytorch_nn.data_loading.vstat_dataset import Vstat_Dataset
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": Vstat_Dataset,
