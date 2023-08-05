@@ -367,22 +367,28 @@ def collate_fn_value_network(data):
 
 def collate_fn_value_policy_network(data):
     in_size = 0
-    out_size = 0
+    out_policy_size = 0
+    out_value_size = 0
     for item in data:
         in_size += item['in'].shape[0]
-        out_size += item['out'].shape[0]
+        out_policy_size += item['out_policy'].shape[0]
+        out_value_size += item['out_value'].shape[0]
     result = {
         'in': torch.zeros([in_size, INPUT_PLANES, 8, 8], dtype=torch.float32),
-        'out': torch.zeros([out_size], dtype=torch.float32)
+        'out_policy': torch.zeros([out_policy_size, OUTPUT_PLANES, 8, 8], dtype=torch.float32),
+        'out_value': torch.zeros([out_value_size], dtype=torch.float32)
     }
     in_index = 0
-    out_index = 0
+    out_policy_index = 0
+    out_value_index = 0
     for item in data:
         result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
-        result['out'][out_index:out_index + item['out'].shape[0]] = torch.Tensor(item['out'])
+        result['out_policy'][out_policy_index:out_policy_index + item['out_policy'].shape[0]] = torch.Tensor(item['out_policy'])
+        result['out_value'][out_value_index:out_value_index + item['out_value'].shape[0]] = torch.Tensor(item['out_value'])
         in_index += item['in'].shape[0]
-        out_index += item['out'].shape[0]
-    return result['in'], result['out']
+        out_policy_index += item['out_policy'].shape[0]
+        out_value_index += item['out_value'].shape[0]
+    return result['in'], result['out_policy'], result['out_value']
 
 
 

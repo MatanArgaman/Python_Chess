@@ -110,18 +110,22 @@ class MstatDataset(Dataset):
 
             sample_in = load_npz(self.mstat_in[file_index]).toarray()
             sample_in = sample_in.reshape(sample_in.shape[0], 8, 8, INPUT_PLANES)
-            sample_out = np.load(self.mstat_out[file_index])
-            sample_out = sample_out.reshape(sample_out.shape[0], 8, 8, OUTPUT_PLANES)
+            sample_out_policy = load_npz(self.mstat_out_policy[file_index]).toarray()
+            sample_out_policy = sample_out_policy.reshape(sample_out_policy.shape[0], 8, 8, OUTPUT_PLANES)
+            with open(self.mstat_out_value[file_index], 'rb') as fp:
+                sample_out_value = pickle.load(fp)
             self.file_cache['samples'][file_index] = {
                 'in': sample_in,
-                'out': sample_out
+                'out_policy': sample_out_policy,
+                'out_value': sample_out_value
             }
             if self._shuffle: # shuffles the samples within a file (not within the entire dataset)
                 self.file_cache['samples'][file_index]['permutation'] = np.random.permutation(sample_in.shape[0])
             self.file_cache['last_used_file_indices'].append(file_index)
 
         sample_in = self.file_cache['samples'][file_index]['in']
-        sample_out = self.file_cache['samples'][file_index]['out']
+        sample_out_policy = self.file_cache['samples'][file_index]['out_policy']
+        sample_out_value = self.file_cache['samples'][file_index]['out_value']
 
         in_file_idx = idx - self.files_sample_size_accumulative[sample_accumulative_index]
         if self._shuffle:
@@ -133,6 +137,7 @@ class MstatDataset(Dataset):
         # work on a a [8, 8] array and not [8 , IN_PLANES] array.
         result = {
             'in': sample_in[[in_file_idx]].swapaxes(1,3).swapaxes(2,3),
-            'out': sample_out[[in_file_idx]]
+            'out_policy': sample_out_policy[[in_file_idx]].swapaxes(1,3).swapaxes(2,3),
+            'out_value': sample_out_value[[in_file_idx]]
         }
         return result
