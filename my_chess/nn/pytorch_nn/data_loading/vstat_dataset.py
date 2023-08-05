@@ -50,7 +50,7 @@ def load_files(root_dir):
     return indices, vstat_in, vstat_out
 
 
-class Vstat_Dataset(Dataset):
+class VstatDataset(Dataset):
     def __init__(self, split_type, root_dir, seed=5, file_cache_max_size=1, shuffle=False):
         np.random.seed(seed)
         self._file_cache_max_size = file_cache_max_size

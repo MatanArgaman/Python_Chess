@@ -5,14 +5,19 @@ import numpy as np
 
 from shared.shared_functionality import get_config_path
 
-def main(in_dir, is_vstats=False, seed = 5):
+def main(in_dir, is_vstats=False, is_mstats=False, seed = 5):
     np.random.seed(seed)
     if is_vstats:
         from nn.pytorch_nn.data_loading.vstat_dataset import load_files
+        indices, stat_in, stat_out = load_files(in_dir)
+    elif is_mstats:
+        from nn.pytorch_nn.data_loading.mstat_dataset import load_files
+        indices, stat_in, stat_out, _ = load_files(in_dir)
     else:
         from nn.pytorch_nn.data_loading.estat_dataset import load_files
+        indices, stat_in, stat_out = load_files(in_dir)
 
-    indices, stat_in, stat_out = load_files(in_dir)
+
     indices = list(indices[np.random.permutation(indices.size)])
     config_path = get_config_path()
     with open(config_path) as fp:
@@ -50,5 +55,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('in_dir')
     parser.add_argument('--is_vstats', action='store_true')
+    parser.add_argument('--is_mstats', action='store_true')
     args = parser.parse_args()
-    main(args.in_dir, args.is_vstats)
+    main(args.in_dir, args.is_vstats, args.is_mstats)

@@ -285,13 +285,14 @@ def load_pytorch_model(config):
 
 
 def get_dataloader(config):
-    from nn.pytorch_nn.data_loading.estat_dataset import Estat_Dataset
-    from nn.pytorch_nn.data_loading.vstat_dataset import Vstat_Dataset
+    from nn.pytorch_nn.data_loading.estat_dataset import EstatDataset
+    from nn.pytorch_nn.data_loading.vstat_dataset import VstatDataset
+    from nn.pytorch_nn.data_loading.mstat_dataset import MstatDataset
     network_name = config['train']['torch']['network_name']
     networks = {
-        "ValueNetwork": Vstat_Dataset,
-        "PolicyNetwork": Estat_Dataset,
-        "AlphaChessNetwork": Vstat_Dataset  # todo: change to new data + loader
+        "ValueNetwork": VstatDataset,
+        "PolicyNetwork": EstatDataset,
+        "AlphaChessNetwork": MstatDataset
     }
     if network_name in networks:
         return networks[network_name]
@@ -364,13 +365,33 @@ def collate_fn_value_network(data):
         out_index += item['out'].shape[0]
     return result['in'], result['out']
 
+def collate_fn_value_policy_network(data):
+    in_size = 0
+    out_size = 0
+    for item in data:
+        in_size += item['in'].shape[0]
+        out_size += item['out'].shape[0]
+    result = {
+        'in': torch.zeros([in_size, INPUT_PLANES, 8, 8], dtype=torch.float32),
+        'out': torch.zeros([out_size], dtype=torch.float32)
+    }
+    in_index = 0
+    out_index = 0
+    for item in data:
+        result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
+        result['out'][out_index:out_index + item['out'].shape[0]] = torch.Tensor(item['out'])
+        in_index += item['in'].shape[0]
+        out_index += item['out'].shape[0]
+    return result['in'], result['out']
+
+
 
 def get_collate_function(config):
     network_name = config['train']['torch']['network_name']
     networks = {
         "ValueNetwork": collate_fn_value_network,
         "PolicyNetwork": collate_fn_policy_network,
-        "AlphaChessNetwork": collate_fn_value_network  # todo: change to new data + loader
+        "AlphaChessNetwork": collate_fn_value_policy_network
     }
     if network_name in networks:
         return networks[network_name]
