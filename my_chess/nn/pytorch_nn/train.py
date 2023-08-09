@@ -80,9 +80,15 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
     print('Train loss: {:.4f}'.format(epoch_loss))
 
+
 def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
-                 writer=None):
-    running_loss = 0.0
+                             writer=None):
+    running_loss: Dict[str, float] = {}
+    epoch_loss: Dict[str, float] = {}
+
+    for head in model.heads + ['tot']:
+        running_loss[head] = 0.0
+        epoch_loss[head] = 0.0
 
     last_loss = None
     # Iterate over data.
@@ -106,7 +112,7 @@ def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, crite
             outputs = model(inputs)
 
             # CrossEntropy loss is not symmetric, CrossEntropyLoss(B,A) = H(A, softmax(B)) where H is the Cross-Entropy function
-            loss = criterion(outputs, labels)
+            loss, head_losses = criterion(outputs, labels)
 
             # backward + optimize only if in training phase
             if phase == 'train':
@@ -114,7 +120,8 @@ def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, crite
                 optimizer.step()
             last_loss = loss
         # statistics
-        running_loss += loss.item()  # * inputs.size(0)
+        for head in model.heads + ['tot']:
+            running_loss[head] += head_losses[head].item()  # * inputs.size(0)
 
         # del outputs, loss, labels
         # torch.cuda.empty_cache()
@@ -126,13 +133,17 @@ def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, crite
         start_time = time.time()
 
     print(f'Last batch loss: {round(last_loss.item(), 5)}')
-    epoch_loss = running_loss / len(dataloaders[phase])
+    for head in ['tot'] + model.heads:
+        epoch_loss[head] = running_loss[head] / len(dataloaders[phase])
+        if tensorboard == 'on':
+            writer.add_scalar(f"Train loss {head}", epoch_loss[head], epoch)
+        print(f'Train loss {head}: {round(epoch_loss[head],4)}')
 
     if tensorboard == 'on':
-        writer.add_scalar("Train loss", epoch_loss, epoch)
         writer.add_scalar("Train lr", optimizer.param_groups[0]['lr'], epoch)
 
-    print('Train loss: {:.4f}'.format(epoch_loss))
+
+
 
 def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch):
     val_per_head_functions: Dict[str, ValAccuracyBase] = {
@@ -147,11 +158,12 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
     running_loss: Dict[str, float] = {}
     epoch_loss: Dict[str, float] = {}
 
-    for head in model.heads:
+    for head in model.heads + ['tot']:
         epoch_acc[head] = 0.0
         running_loss[head] = 0.0
     with torch.no_grad():
-        for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+        for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]),
+                                                             total=len(dataloaders[phase])):
             inputs = inputs.to(device)
             l_policy = labels_policy.numpy().reshape([labels_policy.shape[0], -1])
             l_value = labels_value
@@ -166,9 +178,10 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
                 'value_network': labels_value
             }
             model(inputs)
-            loss = criterion(model, labels)
+            loss, head_losses = criterion(model, labels)
+            running_loss['tot'] += loss.item()
             for head in model.heads:
-                running_loss[head] += loss.item()  # todo: use loss per head
+                running_loss[head] += head_losses[head].item()
                 # todo: apply torch.softmax on policy head
                 o = model.head_outputs[head].detach().cpu().numpy()
                 o = o.reshape([o.shape[0], -1])
@@ -176,10 +189,11 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
                 # we divide the output space into 3 categories: lose, draw, win
                 alpha_val[head].update_accuracy_from_batch(labels_cpu[head], o)
 
-    for head in model.heads:
-        epoch_acc[head] = alpha_val[head].print_and_log_accuracy()
+    for head in ['tot'] + model.heads:
+        if head in model.heads:
+            epoch_acc[head] = alpha_val[head].print_and_log_accuracy()
         epoch_loss[head] = running_loss[head] / len(dataloaders[phase])
-        print(f'Val loss: {round(epoch_loss[head], 3)} ')
+        print(f'Val loss {head}: {round(epoch_loss[head], 3)} ')
         if tensorboard == 'on':
             writer.add_scalar(f'Val Loss {head}', epoch_loss[head], epoch)
     return epoch_acc
@@ -269,11 +283,15 @@ def set_model_eval(model):
     else:
         model.eval()  # Set model to training mode
 
+
 def load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer):
     model.load_state_dict(torch.load(in_model_path))
     for head in config['train']['torch']['network_heads']:
-        head_path = in_model_path[:-4]+f'_{head}'+in_model_path[-4:]
-        model.head_networks[head].load_state_dict(torch.load(head_path))
+        head_path = in_model_path[:-4] + f'_{head}' + in_model_path[-4:]
+        if os.path.exists(head_path):
+            model.head_networks[head].load_state_dict(torch.load(head_path))
+        else:
+            print(f'skipping loading of head {head} weights')
     print('checking precision of loaded model:')
     with torch.no_grad():
         val_network = get_val_network(config)
@@ -311,15 +329,16 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
 
                 set_model_train(model)
                 train_network = get_train_network(config)
-                train_network(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
-                             writer=writer)
+                train_network(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes,
+                              epoch,
+                              writer=writer)
 
             elif phase == 'val':
                 with torch.no_grad():
                     set_model_eval(model)
                 val_network = get_val_network(config)
                 epoch_acc = val_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
-                epoch_acc = epoch_acc['policy_network']
+                epoch_acc = epoch_acc['value_network']
                 lr_scheduler.step()
                 if epoch_acc > best_acc:
                     best_acc = epoch_acc
@@ -336,8 +355,6 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
     print('Best val Acc: {:4f}'.format(best_acc))
 
 
-
-
 def get_val_network(config):
     network_name = config['train']['torch']['network_name']
     networks = {
@@ -348,6 +365,7 @@ def get_val_network(config):
     if network_name in networks:
         return networks[network_name]
     raise Exception("network name not available")
+
 
 def get_train_network(config):
     network_name = config['train']['torch']['network_name']
@@ -360,6 +378,21 @@ def get_train_network(config):
         return networks[network_name]
     raise Exception("network name not available")
 
+def freeze_model_networks(model, freeze_body, freeze_policy, freeze_value):
+    if freeze_body:
+        freeze_layers(model.body)
+    if freeze_policy:
+        freeze_layers(model.head_networks['policy_network'])
+    if freeze_value:
+        freeze_layers(model.head_networks['value_network'])
+
+
+def freeze_layers(model):
+    model.requires_grad_(False)
+    model.eval()
+    for m in model.modules():
+        if isinstance(m, torch.nn.BatchNorm2d):
+            m.track_running_stats = False
 
 
 def main():
@@ -377,6 +410,9 @@ def main():
     num_epochs = args.num_epochs
     verbose = args.verbose
     in_model_path = args.in_model_path
+    freeze_body = args. freeze_body
+    freeze_value = args.freeze_value
+    freeze_policy = args.freeze_policy
 
     now = datetime.now()
     out_model_path = Path(out_model_path) / now.strftime("%Y_%m_%d___%H_%M_%S")
@@ -408,6 +444,9 @@ def main():
             data_parallel(model.head_networks[head]).to(device)
     criterion = get_criterion(config).to(device)
 
+    freeze_model_networks(model, freeze_body, freeze_policy, freeze_value)
+
+
     if in_model_path is not None:
         load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer)
 
@@ -432,12 +471,14 @@ if __name__ == "__main__":
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
-
+    parser.add_argument('--freeze_body', action='store_true')
+    parser.add_argument('--freeze_value', action='store_true')
+    parser.add_argument('--freeze_policy', action='store_true')
     parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
-    parser.add_argument('--learning_rate', type=int, default=0.0001, help='value of learning rate')
+    parser.add_argument('--learning_rate', type=int, default=0.001, help='value of learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='step size of epochs for learning decay')
     parser.add_argument('--step_size', type=int, default=10, help='step size of epochs for learning decay')
     parser.add_argument('--gamma', type=float, default=0.1, help='learning rate decay factor')
