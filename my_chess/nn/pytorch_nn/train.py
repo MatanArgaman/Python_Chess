@@ -1,21 +1,19 @@
 # example of training the resnet18 model
 from __future__ import print_function, division
 
-from typing import Dict, List, Tuple
-
+from typing import Dict
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 import time
 import os
-import copy
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 import numpy as np
-from enum import Enum
 import argparse
 from tqdm import tqdm
+import copy
+from datetime import datetime
 
 from nn.pytorch_nn.AlphaChess import ValAccuracyBase
 from nn.pytorch_nn.AlphaChess.ValAccuracyPolicy import AlphaValPolicy
@@ -82,6 +80,59 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
 
     print('Train loss: {:.4f}'.format(epoch_loss))
 
+def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
+                 writer=None):
+    running_loss = 0.0
+
+    last_loss = None
+    # Iterate over data.
+    start_time = time.time()
+    for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+        data_time = time.time() - start_time
+        inputs = inputs.to(device)
+        labels_policy = labels_policy.to(device)
+        labels_value = labels_value.to(device)
+        labels = {
+            'policy_network': labels_policy,
+            'value_network': labels_value
+        }
+        # zero the parameter gradients
+        optimizer.zero_grad()
+
+        # forward
+        # track history if only in train
+        with torch.set_grad_enabled(phase == 'train'):
+
+            outputs = model(inputs)
+
+            # CrossEntropy loss is not symmetric, CrossEntropyLoss(B,A) = H(A, softmax(B)) where H is the Cross-Entropy function
+            loss = criterion(outputs, labels)
+
+            # backward + optimize only if in training phase
+            if phase == 'train':
+                loss.backward()
+                optimizer.step()
+            last_loss = loss
+        # statistics
+        running_loss += loss.item()  # * inputs.size(0)
+
+        # del outputs, loss, labels
+        # torch.cuda.empty_cache()
+        train_time = time.time() - start_time - data_time
+        if tensorboard == 'on':
+            step = epoch * len(dataloaders[phase]) + i
+            writer.add_scalar("Data Time", data_time, step)
+            writer.add_scalar("Train Time", train_time, step)
+        start_time = time.time()
+
+    print(f'Last batch loss: {round(last_loss.item(), 5)}')
+    epoch_loss = running_loss / len(dataloaders[phase])
+
+    if tensorboard == 'on':
+        writer.add_scalar("Train loss", epoch_loss, epoch)
+        writer.add_scalar("Train lr", optimizer.param_groups[0]['lr'], epoch)
+
+    print('Train loss: {:.4f}'.format(epoch_loss))
 
 def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch):
     val_per_head_functions: Dict[str, ValAccuracyBase] = {
@@ -100,22 +151,33 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
         epoch_acc[head] = 0.0
         running_loss[head] = 0.0
     with torch.no_grad():
-        for i, (inputs, labels) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+        for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
             inputs = inputs.to(device)
-            l = labels.numpy().reshape([labels.shape[0], -1])
-            labels = labels.to(device)
+            l_policy = labels_policy.numpy().reshape([labels_policy.shape[0], -1])
+            l_value = labels_value
+            labels_policy = labels_policy.to(device)
+            labels_value = labels_value.to(device)
+            labels_cpu = {
+                'policy_network': l_policy,
+                'value_network': l_value
+            }
+            labels = {
+                'policy_network': labels_policy,
+                'value_network': labels_value
+            }
             model(inputs)
-            loss = criterion(model, labels.reshape(labels.shape[0], -1))
+            loss = criterion(model, labels)
             for head in model.heads:
                 running_loss[head] += loss.item()  # todo: use loss per head
                 # todo: apply torch.softmax on policy head
                 o = model.head_outputs[head].detach().cpu().numpy()
+                o = o.reshape([o.shape[0], -1])
                 # calculate precision
                 # we divide the output space into 3 categories: lose, draw, win
-                alpha_val[head].update_accuracy_from_batch(l, o)
+                alpha_val[head].update_accuracy_from_batch(labels_cpu[head], o)
 
     for head in model.heads:
-        alpha_val[head].print_and_log_accuracy()
+        epoch_acc[head] = alpha_val[head].print_and_log_accuracy()
         epoch_loss[head] = running_loss[head] / len(dataloaders[phase])
         print(f'Val loss: {round(epoch_loss[head], 3)} ')
         if tensorboard == 'on':
@@ -207,8 +269,31 @@ def set_model_eval(model):
     else:
         model.eval()  # Set model to training mode
 
+def load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer):
+    model.load_state_dict(torch.load(in_model_path))
+    for head in config['train']['torch']['network_heads']:
+        head_path = in_model_path[:-4]+f'_{head}'+in_model_path[-4:]
+        model.head_networks[head].load_state_dict(torch.load(head_path))
+    print('checking precision of loaded model:')
+    with torch.no_grad():
+        val_network = get_val_network(config)
+        val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
+    print('continuing to train')
 
-def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, model_path,
+
+def save_model(model, model_name, out_model_path, epoch, best_acc):
+    model_filepath = str(
+        out_model_path / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
+    print('saving model: ', model_filepath)
+    torch.save(model.state_dict(), model_filepath)
+    if hasattr(model, 'head_networks'):
+        for head in model.head_networks:
+            model_filepath = str(
+                out_model_path / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}_{head}.pth'.format(**vars()))
+            torch.save(model.head_networks[head].state_dict(), model_filepath)
+
+
+def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, dataset_sizes, num_epochs, out_model_path,
           model_name, tensorboard, writer):
     since = time.time()
     best_acc = 0.0
@@ -218,16 +303,15 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
         print('-' * 10)
 
-        folder = Path(model_path) / model_name
-        os.makedirs(folder, exist_ok=True)
+        os.makedirs(out_model_path, exist_ok=True)
 
         # Each epoch has a training and validation phase
         for phase in ['train', 'val']:
             if phase == 'train':
 
                 set_model_train(model)
-
-                train_helper(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
+                train_network = get_train_network(config)
+                train_network(dataloaders, device, phase, optimizer, model, criterion, tensorboard, dataset_sizes, epoch,
                              writer=writer)
 
             elif phase == 'val':
@@ -235,14 +319,11 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
                     set_model_eval(model)
                 val_network = get_val_network(config)
                 epoch_acc = val_network(dataloaders, device, phase, model, criterion, tensorboard, writer, epoch)
+                epoch_acc = epoch_acc['policy_network']
                 lr_scheduler.step()
-                # if epoch_acc > best_acc:
-                #     best_acc = epoch_acc
-                #     best_model_wts = copy.deepcopy(model.state_dict())
-                #     model_filepath = str(
-                #         folder / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
-                #     print('saving model: ', model_filepath)
-                #     torch.save(model.state_dict(), model_filepath)
+                if epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    save_model(model, model_name, out_model_path, epoch, best_acc)
 
         epoch_time = time.time() - epoch_start
         print('Epoch {:.0f}m {:.0f}s'.format(
@@ -254,10 +335,7 @@ def train(model, criterion, optimizer, lr_scheduler, dataloaders, device, datase
         time_elapsed // 60, time_elapsed % 60))
     print('Best val Acc: {:4f}'.format(best_acc))
 
-    # load best model weights
-    model.load_state_dict(best_model_wts)
 
-    return model
 
 
 def get_val_network(config):
@@ -271,10 +349,22 @@ def get_val_network(config):
         return networks[network_name]
     raise Exception("network name not available")
 
+def get_train_network(config):
+    network_name = config['train']['torch']['network_name']
+    networks = {
+        "ValueNetwork": train_helper,
+        "PolicyNetwork": train_helper,
+        "AlphaChessNetwork": train_helper_alpha_chess
+    }
+    if network_name in networks:
+        return networks[network_name]
+    raise Exception("network name not available")
+
+
 
 def main():
     # call args in args
-    model_path = args.model_path
+    out_model_path = args.out_model_path
     model_name = args.model_name
     data_dir = args.data_dir
     tensorboard = args.tensorboard
@@ -286,7 +376,10 @@ def main():
     batch_size = args.batch_size
     num_epochs = args.num_epochs
     verbose = args.verbose
-    load_model = args.load_model
+    in_model_path = args.in_model_path
+
+    now = datetime.now()
+    out_model_path = Path(out_model_path) / now.strftime("%Y_%m_%d___%H_%M_%S")
 
     # start writer for tensorboard (if 'on')
     writer = None
@@ -315,13 +408,8 @@ def main():
             data_parallel(model.head_networks[head]).to(device)
     criterion = get_criterion(config).to(device)
 
-    if load_model is not None:
-        model.load_state_dict(torch.load(load_model))
-        print('checking precision of loaded model:')
-        with torch.no_grad():
-            val_network = get_val_network(config)
-            val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
-        print('continuing to train')
+    if in_model_path is not None:
+        load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer)
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,
@@ -332,24 +420,24 @@ def main():
 
     # Train model
     model = train(model, criterion, optimizer_ft, exp_lr_scheduler, dataloaders, device, dataset_sizes,
-                  num_epochs=num_epochs, model_path=model_path, model_name=model_name, tensorboard=tensorboard,
+                  num_epochs=num_epochs, out_model_path=out_model_path, model_name=model_name, tensorboard=tensorboard,
                   writer=writer)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--model_path', type=str, default='/home/matan/models/my_models/chess',
+    parser.add_argument('--out_model_path', type=str, default='/home/matan/models/my_models/chess',
                         help='location to save models')
-    parser.add_argument('--load_model', type=str, default=None, help='location of model start train from')
+    parser.add_argument('--in_model_path', type=str, default=None, help='location of model start train from')
     parser.add_argument('--model_name', type=str,
                         default='10_09_22_exp1',
                         help='name of model to be used')
 
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/vstat_100',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
-    parser.add_argument('--learning_rate', type=int, default=0.001, help='value of learning rate')
+    parser.add_argument('--learning_rate', type=int, default=0.0001, help='value of learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='step size of epochs for learning decay')
     parser.add_argument('--step_size', type=int, default=10, help='step size of epochs for learning decay')
     parser.add_argument('--gamma', type=float, default=0.1, help='learning rate decay factor')

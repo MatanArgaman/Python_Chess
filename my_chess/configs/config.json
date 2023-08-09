@@ -24,7 +24,7 @@
         {
 
             "network_name": "AlphaChessNetwork",
-            "network_heads": ["value_network"],
+            "network_heads": ["policy_network"],
             "head_weights": {
                 "value_network": 1,
                 "policy_network": 1

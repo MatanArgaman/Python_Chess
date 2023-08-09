@@ -69,16 +69,16 @@ class AlphaChessHeadValue(nn.Module):
         self.conv1 = conv1x1(256, 1, 1)
         self.bn1 = nn.BatchNorm2d(1, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
-        self.fc1 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(256*8*8, 1)
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
+        # x = self.conv1(x)
+        # x = self.bn1(x)
+        # x = self.relu(x)
         x = x.view(x.shape[0], -1)
         x = self.fc1(x)
-        x = self.tanh(x)
+        # x = self.tanh(x)
         return x
 
 
@@ -151,7 +151,7 @@ class AlphaChessLoss(nn.Module):
         losses['tot'] = 0
         for head in self.heads:
             if head in model.head_networks:
-                losses[head] = self.loss_dict[head](model.head_outputs[head], labels)
+                losses[head] = self.loss_dict[head](model.head_outputs[head], labels[head].view(model.head_outputs[head].shape))
                 losses['tot'] += self.head_weights[head] * losses[head]
         return losses['tot']  # , losses
 
