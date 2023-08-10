@@ -437,13 +437,13 @@ def main():
 
     config = get_config()
     model = get_model(config)
-    model = data_parallel(model).to(device)
     if hasattr(model, 'heads'):
-        data_parallel(model.body).to(device)
+        model.body = data_parallel(model.body).to(device)
         for head in model.heads:
-            data_parallel(model.head_networks[head]).to(device)
+            model.head_networks[head] = data_parallel(model.head_networks[head]).to(device)
+    else:
+        model = data_parallel(model).to(device)
     criterion = get_criterion(config).to(device)
-
     freeze_model_networks(model, freeze_body, freeze_policy, freeze_value)
 
 
@@ -474,7 +474,7 @@ if __name__ == "__main__":
     parser.add_argument('--freeze_body', action='store_true')
     parser.add_argument('--freeze_value', action='store_true')
     parser.add_argument('--freeze_policy', action='store_true')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_100',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_small',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
