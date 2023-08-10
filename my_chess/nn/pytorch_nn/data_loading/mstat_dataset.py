@@ -59,7 +59,7 @@ def load_files(root_dir):
         "difference in keys is not expected after the previous lines which were supposed to remove such keys."
 
     indices = np.array(list(mstat_in.keys()))
-    return indices, mstat_in, mstat_out_policy, mstat_out_value
+    return indices, mstat_in, mstat_out_policy, mstat_out_value, mstat_out_masks
 
 
 class MstatDataset(Dataset):
@@ -69,7 +69,8 @@ class MstatDataset(Dataset):
         self._split_type = split_type
         self._shuffle = shuffle
         self.root_dir = root_dir
-        indices, self.mstat_in, self.mstat_out_policy, self.mstat_out_value = load_files(root_dir)
+        (indices, self.mstat_in, self.mstat_out_policy,
+         self.mstat_out_value, self.mstat_out_masks) = load_files(root_dir)
 
         config = get_config()
         out_filename = config['train']['torch']['data_partition_filename']
@@ -112,12 +113,15 @@ class MstatDataset(Dataset):
             sample_in = sample_in.reshape(sample_in.shape[0], 8, 8, INPUT_PLANES)
             sample_out_policy = load_npz(self.mstat_out_policy[file_index]).toarray()
             sample_out_policy = sample_out_policy.reshape(sample_out_policy.shape[0], 8, 8, OUTPUT_PLANES)
+            with open(self.mstat_out_masks[file_index],'rb') as fp:
+                sample_out_masks = pickle.load(fp)
             with open(self.mstat_out_value[file_index], 'rb') as fp:
                 sample_out_value = pickle.load(fp)
             self.file_cache['samples'][file_index] = {
                 'in': sample_in,
                 'out_policy': sample_out_policy,
-                'out_value': sample_out_value
+                'out_value': sample_out_value,
+                'out_policy_masks': sample_out_masks
             }
             if self._shuffle: # shuffles the samples within a file (not within the entire dataset)
                 self.file_cache['samples'][file_index]['permutation'] = np.random.permutation(sample_in.shape[0])
@@ -126,6 +130,7 @@ class MstatDataset(Dataset):
         sample_in = self.file_cache['samples'][file_index]['in']
         sample_out_policy = self.file_cache['samples'][file_index]['out_policy']
         sample_out_value = self.file_cache['samples'][file_index]['out_value']
+        sample_out_masks = self.file_cache['samples'][file_index]['out_policy_masks']
 
         in_file_idx = idx - self.files_sample_size_accumulative[sample_accumulative_index]
         if self._shuffle:
@@ -138,6 +143,7 @@ class MstatDataset(Dataset):
         result = {
             'in': sample_in[[in_file_idx]].swapaxes(1,3).swapaxes(2,3),
             'out_policy': sample_out_policy[[in_file_idx]].swapaxes(1,3).swapaxes(2,3),
-            'out_value': sample_out_value[[in_file_idx]]
+            'out_value': sample_out_value[[in_file_idx]],
+            'out_policy_masks': sample_out_masks[[in_file_idx]]
         }
         return result

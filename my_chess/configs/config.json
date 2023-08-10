@@ -25,9 +25,10 @@
 
             "network_name": "AlphaChessNetwork",
             "network_heads": ["value_network", "policy_network"],
+            "policy_loss_move_weight": 0.05,
             "head_weights": {
                 "value_network": 1,
-                "policy_network": 100
+                "policy_network": 1
             },
             "data_partitioning": {
             "train": 80,

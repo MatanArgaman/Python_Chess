@@ -93,13 +93,14 @@ def train_helper_alpha_chess(dataloaders, device, phase, optimizer, model, crite
     last_loss = None
     # Iterate over data.
     start_time = time.time()
-    for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
+    for i, (inputs, labels_policy, labels_value, labels_masks) in tqdm(enumerate(dataloaders[phase]), total=len(dataloaders[phase])):
         data_time = time.time() - start_time
         inputs = inputs.to(device)
         labels_policy = labels_policy.to(device)
         labels_value = labels_value.to(device)
+        labels_masks = labels_masks.to(device)
         labels = {
-            'policy_network': labels_policy,
+            'policy_network': [labels_policy, labels_masks],
             'value_network': labels_value
         }
         # zero the parameter gradients
@@ -162,19 +163,21 @@ def val_alpha_chess_network(dataloaders, device, phase, model, criterion, tensor
         epoch_acc[head] = 0.0
         running_loss[head] = 0.0
     with torch.no_grad():
-        for i, (inputs, labels_policy, labels_value) in tqdm(enumerate(dataloaders[phase]),
+        for i, (inputs, labels_policy, labels_value, labels_masks) in tqdm(enumerate(dataloaders[phase]),
                                                              total=len(dataloaders[phase])):
             inputs = inputs.to(device)
             l_policy = labels_policy.numpy().reshape([labels_policy.shape[0], -1])
+            l_masks = labels_masks.numpy().reshape([labels_masks.shape[0], -1])
             l_value = labels_value
             labels_policy = labels_policy.to(device)
             labels_value = labels_value.to(device)
+            labels_masks = labels_masks.to(device)
             labels_cpu = {
-                'policy_network': l_policy,
-                'value_network': l_value
+                'policy_network': [l_policy, l_masks],
+                'value_network': l_value,
             }
             labels = {
-                'policy_network': labels_policy,
+                'policy_network': [labels_policy, labels_masks],
                 'value_network': labels_value
             }
             model(inputs)
@@ -474,7 +477,7 @@ if __name__ == "__main__":
     parser.add_argument('--freeze_body', action='store_true')
     parser.add_argument('--freeze_value', action='store_true')
     parser.add_argument('--freeze_policy', action='store_true')
-    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_small',
+    parser.add_argument('--data_dir', type=str, default='/home/matan/data/mydata/chess/caissabase/pgn/mstat_100',
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')

@@ -369,26 +369,32 @@ def collate_fn_value_policy_network(data):
     in_size = 0
     out_policy_size = 0
     out_value_size = 0
+    out_masks_size = 0
     for item in data:
         in_size += item['in'].shape[0]
         out_policy_size += item['out_policy'].shape[0]
         out_value_size += item['out_value'].shape[0]
+        out_masks_size += item['out_policy_masks'].shape[0]
     result = {
         'in': torch.zeros([in_size, INPUT_PLANES, 8, 8], dtype=torch.float32),
         'out_policy': torch.zeros([out_policy_size, OUTPUT_PLANES, 8, 8], dtype=torch.float32),
-        'out_value': torch.zeros([out_value_size], dtype=torch.float32)
+        'out_value': torch.zeros([out_value_size], dtype=torch.float32),
+        'out_policy_masks': torch.zeros([out_value_size], dtype=torch.float32)
     }
     in_index = 0
     out_policy_index = 0
     out_value_index = 0
+    out_policy_masks_index = 0
     for item in data:
         result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
         result['out_policy'][out_policy_index:out_policy_index + item['out_policy'].shape[0]] = torch.Tensor(item['out_policy'])
         result['out_value'][out_value_index:out_value_index + item['out_value'].shape[0]] = torch.Tensor(item['out_value'])
+        result['out_policy_masks'][out_policy_masks_index:out_policy_masks_index + item['out_policy_masks'].shape[0]] = torch.Tensor(item['out_policy_masks'])
         in_index += item['in'].shape[0]
         out_policy_index += item['out_policy'].shape[0]
         out_value_index += item['out_value'].shape[0]
-    return result['in'], result['out_policy'], result['out_value']
+        out_policy_masks_index += item['out_policy_masks'].shape[0]
+    return result['in'], result['out_policy'], result['out_value'], result['out_policy_masks']
 
 
 

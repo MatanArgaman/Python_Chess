@@ -54,7 +54,6 @@ class AlphaChessBody(nn.Module):
         self.bn1 = nn.BatchNorm2d(256, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
 
-
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
@@ -137,13 +136,14 @@ class AlphaChessComplete(nn.Module):
 
 
 class AlphaChessLoss(nn.Module):
-    def __init__(self, heads: List[str], head_weights: Dict[str, int]):
+    def __init__(self, heads: List[str], head_weights: Dict[str, int], policy_loss_move_weight: float):
         super(AlphaChessLoss, self).__init__()
         self.heads = heads
         self.head_weights = head_weights
+        self.policy_loss_move_weight = policy_loss_move_weight
         self.loss_dict = {
             'value_network': nn.MSELoss(reduction='mean'),
-            'policy_network': nn.CrossEntropyLoss(reduction='mean')
+            'policy_network': nn.CrossEntropyLoss(reduction='none')
         }
 
     def forward(self, model, labels):
@@ -151,7 +151,17 @@ class AlphaChessLoss(nn.Module):
         losses['tot'] = 0
         for head in self.heads:
             if head in model.head_networks:
-                losses[head] = self.loss_dict[head](model.head_outputs[head], labels[head].view(model.head_outputs[head].shape))
+                if head == 'policy_network':
+                    policy_labels = labels[head][0]
+                    mask_weights = labels[head][1]
+                    # threshold just to differentiate between 0 and 1s (as we're dealing with floats)
+                    mask_weights[mask_weights < 0.5] = self.policy_loss_move_weight
+                    losses[head] = torch.mean(mask_weights *
+                                              self.loss_dict[head](model.head_outputs[head].view(model.head_outputs[head].shape[0], -1),
+                                                                   policy_labels.view(model.head_outputs[head].shape[0], -1)))
+                else:
+                    losses[head] = self.loss_dict[head](model.head_outputs[head],
+                                                        labels[head].view(model.head_outputs[head].shape))
                 losses['tot'] += self.head_weights[head] * losses[head]
         return losses['tot'], losses  # , losses
 
@@ -170,5 +180,5 @@ def get_alpha_chess_losses():
     train = config['train']['torch']
     heads = train['network_heads']
     head_weights = train['head_weights']
-    loss = AlphaChessLoss(heads, head_weights)
+    loss = AlphaChessLoss(heads, head_weights, train['policy_loss_move_weight'])
     return loss
