@@ -14,6 +14,7 @@ import argparse
 from tqdm import tqdm
 import copy
 from datetime import datetime
+import git
 
 from nn.pytorch_nn.AlphaChess import ValAccuracyBase
 from nn.pytorch_nn.AlphaChess.ValAccuracyPolicy import AlphaValPolicy
@@ -398,6 +399,13 @@ def freeze_layers(model):
             m.track_running_stats = False
 
 
+def save_git_commit(writer: SummaryWriter) -> None:
+    repo = git.Repo(search_parent_directories=True)
+    sha = repo.head.object.hexsha
+    message = repo.head.object.message
+    writer.add_text('git_sha', sha)
+    writer.add_text('git_message', message)
+
 def main():
     # call args in args
     out_model_path = args.out_model_path
@@ -424,6 +432,7 @@ def main():
     writer = None
     if tensorboard == 'on':
         writer = SummaryWriter(log_path)
+        save_git_commit(writer)
 
     # build dataset, load it onto dataloader, and get relevant information (dataset size, class names)
     is_local = torch.cuda.device_count() == 1  # todo: use data parallel
