@@ -13,7 +13,7 @@ class AlphaValValue(AlphaValHead):
 
     def update_accuracy_from_batch(self, labels: np.ndarray, outputs: np.ndarray) -> None:
         l2 = value_to_outcome(labels)
-        o2 = value_to_outcome(outputs)
+        o2 = value_to_outcome(outputs[:, 0])
         tp = ((l2 == o2).sum())
         fp = ((l2 != o2).sum())
         self.tp += tp
