@@ -12,16 +12,17 @@ from pathlib import Path
 import numpy as np
 import argparse
 from tqdm import tqdm
-import copy
 from datetime import datetime
 import git
 
 from nn.pytorch_nn.AlphaChess import ValAccuracyBase
 from nn.pytorch_nn.AlphaChess.ValAccuracyPolicy import AlphaValPolicy
 from nn.pytorch_nn.AlphaChess.ValAccuracyValue import AlphaValValue
+from nn.pytorch_nn.AlphaChess.utils import load_model, create_alpha_chess_model
 from nn.pytorch_nn.data_loading.dataloaders import build_dataloaders
 
-from shared.shared_functionality import data_parallel, get_config, get_model, get_criterion, value_to_outcome
+from shared.shared_functionality import get_config, value_to_outcome, \
+    get_criterion
 
 
 ## Train model functions
@@ -42,7 +43,6 @@ def train_helper(dataloaders, device, phase, optimizer, model, criterion, tensor
         data_time = time.time() - start_time
         inputs = inputs.to(device)
         labels = labels.to(device)
-
         # zero the parameter gradients
         optimizer.zero_grad()
 
@@ -288,21 +288,6 @@ def set_model_eval(model):
         model.eval()  # Set model to training mode
 
 
-def load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer):
-    model.load_state_dict(torch.load(in_model_path))
-    for head in config['train']['torch']['network_heads']:
-        head_path = in_model_path[:-4] + f'_{head}' + in_model_path[-4:]
-        if os.path.exists(head_path):
-            model.head_networks[head].load_state_dict(torch.load(head_path))
-        else:
-            print(f'skipping loading of head {head} weights')
-    print('checking precision of loaded model:')
-    with torch.no_grad():
-        val_network = get_val_network(config)
-        val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
-    print('continuing to train')
-
-
 def save_model(model, model_name, out_model_path, epoch, best_acc):
     model_filepath = str(
         out_model_path / f'model_{model_name}_epoch_{epoch}_acc_{best_acc:.4f}.pth'.format(**vars()))
@@ -382,22 +367,6 @@ def get_train_network(config):
         return networks[network_name]
     raise Exception("network name not available")
 
-def freeze_model_networks(model, freeze_body, freeze_policy, freeze_value):
-    if freeze_body:
-        freeze_layers(model.body)
-    if freeze_policy:
-        freeze_layers(model.head_networks['policy_network'])
-    if freeze_value:
-        freeze_layers(model.head_networks['value_network'])
-
-
-def freeze_layers(model):
-    model.requires_grad_(False)
-    model.eval()
-    for m in model.modules():
-        if isinstance(m, torch.nn.BatchNorm2d):
-            m.track_running_stats = False
-
 
 def save_git_commit(writer: SummaryWriter) -> None:
     repo = git.Repo(search_parent_directories=True)
@@ -448,19 +417,17 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     config = get_config()
-    model = get_model(config)
-    if hasattr(model, 'heads'):
-        model.body = data_parallel(model.body).to(device)
-        for head in model.heads:
-            model.head_networks[head] = data_parallel(model.head_networks[head]).to(device)
-    else:
-        model = data_parallel(model).to(device)
     criterion = get_criterion(config).to(device)
-    freeze_model_networks(model, freeze_body, freeze_policy, freeze_value)
 
-
+    model = create_alpha_chess_model(device, freeze_body, freeze_policy, freeze_value)
     if in_model_path is not None:
-        load_model(model, in_model_path, config, dataloaders, device, criterion, tensorboard, writer)
+        load_model(model, in_model_path, config)
+
+    print('checking precision of loaded model:')
+    with torch.no_grad():
+        val_network = get_val_network(config)
+        val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
+    print('continuing to train')
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,

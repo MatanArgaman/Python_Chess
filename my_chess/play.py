@@ -7,12 +7,26 @@ from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
 import json
 from datetime import datetime
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QThread, QObject, pyqtSignal
 
+import nn.pytorch_nn.AlphaChess.utils
 from algorithms.alpha_beta import alpha_beta_move
-from algorithms.mcts import MCTS_Node, mcts_move
+from algorithms.mcts import MCTS_Node, mcts_move, get_nn_and_device
 from shared.shared_functionality import *
 from shared.shared_functionality import get_nn_moves_and_probabilities
+
+
+class Worker(QObject):
+    finished = pyqtSignal()
+    progress = pyqtSignal(int)
+
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+
+    def run(self):
+        """Long-running task."""
+        self.window.play()
 
 
 class MainWindow(QWidget):
@@ -47,9 +61,18 @@ class MainWindow(QWidget):
         self.use_database = args.database
         self.use_mcts = args.mcts
 
-        self.save_game_path = os.path.join(os.getcwd(),"games", 'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
+        self.save_game_path = os.path.join(os.getcwd(), "games",
+                                           'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
         self.board_move_counter = 0
         os.makedirs(self.save_game_path)
+
+        # self.thread = QThread()
+        # self.worker = Worker(self)
+        # self.thread.started.connect(self.worker.run)
+        # self.thread.start()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.play)
+        self.timer.start(1000)
 
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
@@ -105,8 +128,10 @@ class MainWindow(QWidget):
             except:
                 self.Log
         if self.use_mcts:
+            if self.nn_model is None:
+                self.device, self.nn_model = get_nn_and_device(True, self.config)
             MCTS_Node.use_nn = self.use_nn
-            move = mcts_move(self.chessboard, self._is_torch_nn, self.config)[0]
+            move = mcts_move(self.chessboard, self.nn_model, self.device)[0]
             return move
         if self.use_nn:
             try:
@@ -115,7 +140,7 @@ class MainWindow(QWidget):
                         self.device, self.nn_model = load_pytorch_model(self.config)
                     elif self.config['play']['network_type'] == 'tensorflow':
                         from tensorflow import keras
-                        self.nn_model = keras.models.load_model(self.config['play']['tf_nn_path'])
+                        self.nn_model = nn.pytorch_nn.AlphaChess.utils.load_model(self.config['play']['tf_nn_path'])
                 # returns the best k moves
                 moves, probabilities = get_nn_moves_and_probabilities([self.chessboard.copy()],
                                                                       self.nn_model,
@@ -212,17 +237,20 @@ class MainWindow(QWidget):
         return str(row) + str(col)
 
     def play(self):
-        print("played")
         move = None
         if self.chessboard.turn:
             if not args.whuman:
                 move = self.get_computer_move()
         else:
-            if args.bhuman:
+            if not args.bhuman:
                 move = self.get_computer_move()
         if move is not None:
+            print(f"played: {move}")
             self.move(move)
-        time.sleep(1)
+            self.widgetSvg.update()
+        # save board image to file
+        imageVar2 = self.widgetSvg.grab(self.widgetSvg.rect())
+        imageVar2.save(os.path.join(self.save_game_path, f'move_{self.board_move_counter}.png'))
 
 
 if __name__ == '__main__':

@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torch.nn.functional as F
-from shared.shared_functionality import OUTPUT_PLANES
+from shared.shared_functionality import OUTPUT_PLANES, INPUT_PLANES
+
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
 
@@ -267,24 +268,25 @@ class ValueNetwork(nn.Module):
         super(ValueNetwork, self).__init__()
 
         self.model = resnet18(pretrained=True, skip_last=True, normalize=True)
-        self.fc1 = nn.Linear(53760, 1)
-        self.up = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
-        self.conv2d = nn.Conv2d(8, 64, kernel_size=1, stride=1, padding=1,
+        self.fc1 = nn.Linear(1024, 1)
+        self.up = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
+        self.conv2d = nn.Conv2d(INPUT_PLANES, 64, kernel_size=1, stride=1, padding=0,
                                bias=False)
     def forward(self, x):
         x = self.conv2d(x)
         x = self.model.bn1(x)
         x = self.model.relu(x)
 
-        x = self.up(x)
+        # x = self.up(x)
+
         # print('x shape before layer1', x.shape)
-        x = self.model.layer1(x)
         x = self.model.layer1(x)
         # print('x shape before layer2', x.shape)
         x = self.model.layer2(x)
         # print('x shape before layer3', x.shape)
         x = self.model.layer3(x)
-
+        # print('x shape before layer4', x.shape)
+        # x = self.model.layer4(x)
         x = x.view(x.size(0), -1)
         # print(f'x shape before fc:{x.shape}')
         x = self.fc1(x)

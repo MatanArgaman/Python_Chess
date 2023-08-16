@@ -7,10 +7,24 @@ import chess
 import numpy as np
 import tqdm
 from typing import List, Optional
+import torch
+
+from predict import get_input_representation
 from shared.shared_functionality import get_nn_moves_and_probabilities, load_pytorch_model, SingletonLogger, \
     load_tensorflow_model
+from nn.pytorch_nn.AlphaChess.utils import create_alpha_chess_model, load_model
 
 LOG = SingletonLogger().get_logger('play')
+
+
+def get_definitive_value(board: chess.Board) -> Optional[float]:
+    if board.is_checkmate():
+        if board.turn: # todo: check if not opposite
+            return 1
+        return 0
+    if board.is_insufficient_material() or board.is_stalemate():
+        return 0.5
+    return None
 
 
 class MCTS_Node:
@@ -62,9 +76,14 @@ class MCTS_Node:
         # calculate nn best moves
         self.best_moves: List[chess.Move] = []
         if MCTS_Node.use_nn is not None:
-            nn_moves, _ = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=10,
-                                                         is_torch_nn=self.is_torch_nn,
-                                                         device=self.device)
+            nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=10,
+                                                                    is_torch_nn=self.is_torch_nn,
+                                                                    device=self.device)
+            self.value = (nn_values.item() + 1) / 2.0  # move from [-1, 1] range to [0, 1] range
+            definitive_value = get_definitive_value(self.board)
+            if definitive_value is not None:
+                self.value = definitive_value
+
             for m in nn_moves[0]:
                 try:
                     m = chess.Move.from_uci(m)
@@ -206,23 +225,10 @@ def merge_trees(node1, node2):
 #     b.push(m)
 
 # mcts_process_num = multiprocessing.cpu_count() - 1
-mcts_process_num = 3
 
 
-def mcts_move(board, is_torch_nn, config, max_games=1000, max_depth=16, k_best_moves=5):
-    global mcts_process_num
-    indices = [(board, max_games, max_depth, k_best_moves, is_torch_nn, config)] * mcts_process_num
-    parameters = board, max_games, max_depth, k_best_moves, is_torch_nn, config
-    root = mcts_move_helper(parameters)
-    # first_root = None
-    # with Pool(mcts_process_num) as p:
-    #     for root in tqdm.tqdm(p.imap(mcts_move_helper, indices), total=len(indices)):
-    #         if first_root is None:
-    #             first_root = root
-    #         else:
-    #             merge_trees(first_root, root)
-    #
-    # root = first_root
+def mcts_move(board, nn_model, device,  max_games=3500, k_best_moves=5):
+    root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
     for item in sorted_nodes:
@@ -234,68 +240,28 @@ def mcts_move(board, is_torch_nn, config, max_games=1000, max_depth=16, k_best_m
 
 def get_nn_and_device(is_torch_nn, config):
     if is_torch_nn:
-        return load_pytorch_model(config)
+        import torch
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model = create_alpha_chess_model(device, True, True, True)
+        load_model(model, config['play']['torch_nn_path'], config)
+        return device, model
     else:
         return load_tensorflow_model(config)
 
 
-def mcts_move_helper(parameters) -> MCTS_Node:
-    board, max_games, max_depth, k_best_moves, is_torch_nn, config = parameters
+def mcts_move_helper(board, max_games, nn_model, device) -> MCTS_Node:
     start_time = time.time()  # about 24 seconds for a single processor
-    start_material_score = basic_evaluation(board)
 
     MCTS_Node.reset_counter()
-    device, nn_model = None, None
-    if MCTS_Node.use_nn:
-        device, nn_model = get_nn_and_device(is_torch_nn, config)
-    root: MCTS_Node = MCTS_Node(board, nn_model=nn_model, device=device, is_torch_nn=is_torch_nn)
+    root: MCTS_Node = MCTS_Node(board, nn_model=nn_model, device=device, is_torch_nn=True)
 
-    while root.played < max_games:
-
+    print('computer calculating move')
+    for _ in tqdm.tqdm(range(max_games)):
         # Selection + Expansion
         selected_node: MCTS_Node = root.select()
-        assert selected_node.depth < max_depth
-        if is_game_over(selected_node.board):
-            continue
-
-        # simulation
-        node = selected_node
-        while (not is_game_over(node.board)) and node.depth < max_depth:
-            node = node.create_new_child(node.get_nn_best_move(), is_calc_all=False)
-        if not is_game_over(node.board):
-            assert root.board.turn == node.board.turn, "search should end in the same turn as the current player as the last move should be the opppont's"
 
         # backpropagation
-        if node.board.is_insufficient_material() or node.board.is_stalemate():
-            reward = 0.5
-        else:
-            if board.turn:
-                if not node.board.turn:
-                    if node.board.is_checkmate():
-                        reward = 1
-                    else:
-                        assert node.depth == max_depth
-                        reward = get_material_reward(node.board, board.turn, start_material_score)
-                else:
-                    if node.board.is_checkmate():
-                        reward = 0
-                    else:
-                        assert node.depth == max_depth
-                        reward = get_material_reward(node.board, board.turn, start_material_score)
-            else:
-                if not node.board.turn:
-                    if node.board.is_checkmate():
-                        reward = 0
-                    else:
-                        assert node.depth == max_depth
-                        reward = get_material_reward(node.board, board.turn, start_material_score)
-                else:
-                    if node.board.is_checkmate():
-                        reward = 1
-                    else:
-                        assert node.depth == max_depth
-                        reward = get_material_reward(node.board, board.turn, start_material_score)
-
+        reward = selected_node.value
         node = selected_node
         while node is not None:
             node.played += 1

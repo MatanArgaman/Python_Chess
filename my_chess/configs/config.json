@@ -6,7 +6,7 @@
         "file_name": "dstat"
         },
         "network_type": "torch",
-        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/policy_models/first/model_12_07_23_exp1_epoch_0_acc_0.3402.pth",
+        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/alpha_chess/2023_08_11___02_19_26/model_alpha_11_08_2023_exp1_epoch_1_acc_0.3343.pth",
         "tf_nn_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1"
     },
 
@@ -28,7 +28,7 @@
             "policy_loss_move_weight": 0.05,
             "head_weights": {
                 "value_network": 1,
-                "policy_network": 1
+                "policy_network": 10
             },
             "data_partitioning": {
             "train": 80,

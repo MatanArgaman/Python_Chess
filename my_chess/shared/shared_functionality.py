@@ -150,19 +150,19 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
         board.fullmove_number = 0
         input_representation[i] = get_input_representation(board, 0)[np.newaxis]
 
-    if is_torch_nn:
-        with torch.no_grad():
-            output = model(torch.tensor(input_representation, dtype=torch.float32).to(device))
-            output = torch.softmax(output, dim=1)
-            output = output.view([output.shape[0], 8, 8, OUTPUT_PLANES])
-            output = output.detach().cpu().numpy()
-    else:
-        output = model.predict(input_representation)
+    with torch.no_grad():
+        model(torch.tensor(input_representation.transpose(0, 3, 1, 2), dtype=torch.float32).to(device))
+        output_policy = model.head_outputs['policy_network']
+        output_policy = torch.softmax(output_policy.reshape(output_policy.shape[0], -1), dim=1)
+        output_policy = output_policy.view([output_policy.shape[0], OUTPUT_PLANES, 8, 8])
+        output_policy = output_policy.detach().cpu().numpy().transpose(0,  2, 3, 1)
+        values = model.head_outputs['value_network']
+        values = values.detach().cpu().numpy()
     moves = []
     probabilities = []
-    for i in range(output.shape[0]):
+    for i in range(output_policy.shape[0]):
 
-        o = output[i]
+        o = output_policy[i]
         sorted_o = np.sort(o.flatten())
         threshold = sorted_o[-k_best_moves]
         a, b, c = np.where(o >= threshold)
@@ -189,7 +189,7 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
             m = [move_to_mirror_move(move) for move in m]
         moves.append(m)
         probabilities.append(p)
-    return moves, probabilities
+    return moves, probabilities, values
 
 
 def get_config_path(file_name='config.json'):
@@ -365,6 +365,7 @@ def collate_fn_value_network(data):
         out_index += item['out'].shape[0]
     return result['in'], result['out']
 
+
 def collate_fn_value_policy_network(data):
     in_size = 0
     out_policy_size = 0
@@ -387,15 +388,18 @@ def collate_fn_value_policy_network(data):
     out_policy_masks_index = 0
     for item in data:
         result['in'][in_index:in_index + item['in'].shape[0]] = torch.Tensor(item['in'])
-        result['out_policy'][out_policy_index:out_policy_index + item['out_policy'].shape[0]] = torch.Tensor(item['out_policy'])
-        result['out_value'][out_value_index:out_value_index + item['out_value'].shape[0]] = torch.Tensor(item['out_value'])
-        result['out_policy_masks'][out_policy_masks_index:out_policy_masks_index + item['out_policy_masks'].shape[0]] = torch.Tensor(item['out_policy_masks'])
+        result['out_policy'][out_policy_index:out_policy_index + item['out_policy'].shape[0]] = torch.Tensor(
+            item['out_policy'])
+        result['out_value'][out_value_index:out_value_index + item['out_value'].shape[0]] = torch.Tensor(
+            item['out_value'])
+        result['out_policy_masks'][
+        out_policy_masks_index:out_policy_masks_index + item['out_policy_masks'].shape[0]] = torch.Tensor(
+            item['out_policy_masks'])
         in_index += item['in'].shape[0]
         out_policy_index += item['out_policy'].shape[0]
         out_value_index += item['out_value'].shape[0]
         out_policy_masks_index += item['out_policy_masks'].shape[0]
     return result['in'], result['out_policy'], result['out_value'], result['out_policy_masks']
-
 
 
 def get_collate_function(config):
@@ -422,3 +426,11 @@ def value_to_outcome(value: np.ndarray) -> np.ndarray:
     outcomes[value > (1.0 / 3)] = Outcomes.WIN.value
     outcomes[((-1.0 / 3) <= value) & (value <= (1.0 / 3))] = Outcomes.DRAW.value
     return outcomes
+
+
+def freeze_layers(model):
+    model.requires_grad_(False)
+    model.eval()
+    for m in model.modules():
+        if isinstance(m, torch.nn.BatchNorm2d):
+            m.track_running_stats = False

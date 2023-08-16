@@ -13,6 +13,7 @@ from shutil import copyfile
 import pickle
 import time
 
+import nn.pytorch_nn.AlphaChess.utils
 from shared.shared_functionality import INPUT_PLANES, OUTPUT_PLANES, get_config_path, get_nn_io_file, get_all_train_files_indices
 from nn.tensorflow_nn.evaluate import single_file_evaluate
 
@@ -252,7 +253,7 @@ def train_model(model, config, train_writer, test_writer):
             print("train time: {:.2f} s".format(train_end_time-train_start_time))
             print("epoch:", epoch, "round:", counter, '/', len(file_indices))
         del model
-        model = keras.models.load_model(con_train['nn_model_path'])
+        model = nn.pytorch_nn.AlphaChess.utils.load_model(con_train['nn_model_path'])
 
 
 if __name__ == '__main__':
@@ -274,7 +275,7 @@ if __name__ == '__main__':
 
     # get the model (load from disk or compile)
     if args.load:
-        model = keras.models.load_model(con_train['nn_model_path'])
+        model = nn.pytorch_nn.AlphaChess.utils.load_model(con_train['nn_model_path'])
     else:
         res = get_model(config)
         if isinstance(res, tuple):

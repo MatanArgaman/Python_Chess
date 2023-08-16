@@ -77,7 +77,7 @@ class AlphaChessHeadValue(nn.Module):
         x = self.relu(x)
         x = x.view(x.shape[0], -1)
         x = self.fc1(x)
-        # x = self.tanh(x)
+        x = self.tanh(x)
         return x
 
 

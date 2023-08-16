@@ -6,6 +6,8 @@ import chess
 import json
 from tensorflow import keras
 import tensorflow as tf
+
+import nn.pytorch_nn.AlphaChess.utils
 from shared.shared_functionality import get_fen_moves_and_probabilities, get_nn_moves_and_probabilities
 from matplotlib.pyplot import *
 
@@ -15,7 +17,7 @@ def evaluate_nn(total_samples=None):
     with open(os.path.join(os.getcwd(), '../../', 'config.json'), 'r') as f:
         config = json.load(f)
 
-    nn_model = keras.models.load_model(config['train']['nn_model_path'])
+    nn_model = nn.pytorch_nn.AlphaChess.utils.load_model(config['train']['nn_model_path'])
 
     counter = [0]
     score_list = []
@@ -78,7 +80,7 @@ if __name__ == '__main__':
     # evaluate_nn(total_samples=10002)
     test_index1, test_index2 = config['train']['test_index1'], config['train']['test_index2']
 
-    nn_model = keras.models.load_model(config['train']['nn_model_path'])
+    nn_model = nn.pytorch_nn.AlphaChess.utils.load_model(config['train']['nn_model_path'])
 
     UP_TO_K = 50
     train_score = single_file_evaluate(nn_model, config, 1000, test_index1, k_best_moves=np.arange(1, UP_TO_K))
