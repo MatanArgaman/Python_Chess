@@ -423,11 +423,11 @@ def main():
     if in_model_path is not None:
         load_model(model, in_model_path, config)
 
-    print('checking precision of loaded model:')
-    with torch.no_grad():
-        val_network = get_val_network(config)
-        val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
-    print('continuing to train')
+        print('checking precision of loaded model:')
+        with torch.no_grad():
+            val_network = get_val_network(config)
+            val_network(dataloaders, device, 'val', model, criterion, tensorboard, writer, 0)
+        print('continuing to train')
 
     # Observe that all parameters are being optimized
     optimizer_ft = optim.Adam(model.parameters(), lr=learning_rate,
