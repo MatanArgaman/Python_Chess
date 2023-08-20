@@ -457,7 +457,7 @@ if __name__ == "__main__":
                         help='location of folder of images to be trained and validated')
     parser.add_argument('--tensorboard', type=str, default='on', help='start loss/acc tracking using tensorboard')
     parser.add_argument('--log_path', type=str, default='runs/chess/val_logs', help='folder of tensorboard logs')
-    parser.add_argument('--learning_rate', type=int, default=0.001, help='value of learning rate')
+    parser.add_argument('--learning_rate', type=int, default=0.0001, help='value of learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.0, help='step size of epochs for learning decay')
     parser.add_argument('--step_size', type=int, default=10, help='step size of epochs for learning decay')
     parser.add_argument('--gamma', type=float, default=0.1, help='learning rate decay factor')

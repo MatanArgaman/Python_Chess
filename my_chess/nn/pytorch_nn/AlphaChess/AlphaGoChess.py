@@ -49,9 +49,9 @@ class BasicAlphaChessBlock(nn.Module):
 class AlphaChessBody(nn.Module):
     def __init__(self):
         super(AlphaChessBody, self).__init__()
-        self.blocks = nn.Sequential(*[BasicAlphaChessBlock(256, 256, 1) for _ in range(19)])
-        self.conv1 = conv3x3(INPUT_PLANES, 256, 1)
-        self.bn1 = nn.BatchNorm2d(256, eps=1e-05)
+        self.blocks = nn.Sequential(*[BasicAlphaChessBlock(512, 512, 1) for _ in range(19)])
+        self.conv1 = conv3x3(INPUT_PLANES, 512, 1)
+        self.bn1 = nn.BatchNorm2d(512, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
@@ -65,13 +65,15 @@ class AlphaChessBody(nn.Module):
 class AlphaChessHeadValue(nn.Module):
     def __init__(self):
         super(AlphaChessHeadValue, self).__init__()
-        self.conv1 = conv1x1(256, 1, 1)
-        self.bn1 = nn.BatchNorm2d(1, eps=1e-05)
+        self.blocks = nn.Sequential(*[BasicAlphaChessBlock(512, 512, 1) for _ in range(1)])
+        self.conv1 = conv1x1(512, 16, 1)
+        self.bn1 = nn.BatchNorm2d(16, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
-        self.fc1 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(64*16, 1)
         self.tanh = nn.Tanh()
 
     def forward(self, x):
+        x = self.blocks(x)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -84,10 +86,10 @@ class AlphaChessHeadValue(nn.Module):
 class AlphaChessHeadPolicy(nn.Module):
     def __init__(self):
         super(AlphaChessHeadPolicy, self).__init__()
-        self.conv1 = conv3x3(256, 256, 1)
-        self.bn1 = nn.BatchNorm2d(256, eps=1e-05)
+        self.conv1 = conv3x3(512, 512, 1)
+        self.bn1 = nn.BatchNorm2d(512, eps=1e-05)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(256, OUTPUT_PLANES, 1)
+        self.conv2 = conv3x3(512, OUTPUT_PLANES, 1)
 
     def forward(self, x):
         x = self.conv1(x)
