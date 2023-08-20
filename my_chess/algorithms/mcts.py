@@ -19,8 +19,6 @@ LOG = SingletonLogger().get_logger('play')
 
 def get_definitive_value(board: chess.Board) -> Optional[float]:
     if board.is_checkmate():
-        if board.turn: # todo: check if not opposite
-            return 1
         return 0
     if board.is_insufficient_material() or board.is_stalemate():
         return 0.5
@@ -92,9 +90,9 @@ class MCTS_Node:
                 if m in self.legal_moves:
                     self.best_moves.append(m)
 
+        self.ordered_unexplored_moves: List[chess.Move] = self.best_moves
         if is_calc_all:
             # create a list of all moves to be considered in the mcts
-            self.ordered_unexplored_moves: List[chess.Move] = self.best_moves
             best_moves_set = set(self.best_moves)
             self.ordered_unexplored_moves += list(set(self.avoidance_moves).difference(best_moves_set))
             self.ordered_unexplored_moves += list(set(self.capturing_moves).difference(best_moves_set))
@@ -112,6 +110,13 @@ class MCTS_Node:
     def select(self) -> 'MCTS_Node':
         if self.ordered_unexplored_moves:
             return self.expand()
+
+        # if game is either definitely a stalemate or a checkmate,
+        # return this Node so that its value will be used as the reward.
+        definitive_value = get_definitive_value(self.board)
+        if definitive_value is not None:
+            return self
+
         node: MCTS_Node = self.get_best_child()
         return node.select()
 

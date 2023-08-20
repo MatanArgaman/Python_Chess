@@ -93,8 +93,8 @@ class MainWindow(QWidget):
                 start_position = position_to_index_1d(self.human_move[:2])
                 if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
                                                                 chess.Piece.from_symbol('P')]:
-                    end_position = position_to_index_1d(self.human_move[2:])
-                    if start_position in [end_position + ROW_SIZE, end_position - ROW_SIZE]:
+                    end_position_col, _ = position_to_indices_2d(self.human_move[2:])
+                    if end_position_col in [0, ROW_SIZE-1]:
                         print('enter promotion: q, r, b, n')
                         value = input()
                         if value in ['q', 'r', 'b', 'n']:
@@ -184,8 +184,7 @@ class MainWindow(QWidget):
             self.move(move)
 
             # save board image to file
-            imageVar2 = self.widgetSvg.grab(self.widgetSvg.rect())
-            imageVar2.save(os.path.join(self.save_game_path, f'move_{self.board_move_counter}.png'))
+            self.save_state()
 
             if self.chessboard.is_checkmate():
                 if self.chessboard.turn:
@@ -249,8 +248,17 @@ class MainWindow(QWidget):
             self.move(move)
             self.widgetSvg.update()
         # save board image to file
+        self.save_state()
+
+    def save_state(self):
+        # save board as image
         imageVar2 = self.widgetSvg.grab(self.widgetSvg.rect())
         imageVar2.save(os.path.join(self.save_game_path, f'move_{self.board_move_counter}.png'))
+        # save board as string
+        with open(os.path.join(self.save_game_path, f'move_{self.board_move_counter}_fen.txt'), 'w') as fp:
+            fp.write(str(self.chessboard.fen()))
+
+
 
 
 if __name__ == '__main__':
