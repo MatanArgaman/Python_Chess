@@ -36,9 +36,6 @@ def create_alpha_chess_model(device, freeze_body, freeze_policy, freeze_value):
     model.body = data_parallel(model.body).to(device)
     for head in model.heads:
         model.head_networks[head] = data_parallel(model.head_networks[head]).to(device)
-    heads = model.heads
-    model = data_parallel(model).to(device)
-    model.heads = heads
     freeze_model_networks(model, freeze_body, freeze_policy, freeze_value)
     return model
 
