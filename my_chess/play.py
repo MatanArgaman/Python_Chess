@@ -93,8 +93,8 @@ class MainWindow(QWidget):
                 start_position = position_to_index_1d(self.human_move[:2])
                 if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
                                                                 chess.Piece.from_symbol('P')]:
-                    end_position_col, _ = position_to_indices_2d(self.human_move[2:])
-                    if end_position_col in [0, ROW_SIZE-1]:
+                    end_position_row, _ = position_to_indices_2d(self.human_move[2:])
+                    if end_position_row in [0, ROW_SIZE-1]:
                         print('enter promotion: q, r, b, n')
                         value = input()
                         if value in ['q', 'r', 'b', 'n']:
@@ -167,8 +167,6 @@ class MainWindow(QWidget):
                         return
                 else:
                     return
-                    move = self.get_computer_move()
-                    self.human_first_click = True
                 print('white:', str(move))
             else:
                 if args.bhuman:
@@ -177,8 +175,6 @@ class MainWindow(QWidget):
                         return
                 else:
                     return
-                    move = self.get_computer_move()
-                    self.human_first_click = True
                 print('black:', str(move))
 
             self.move(move)
@@ -198,6 +194,9 @@ class MainWindow(QWidget):
 
         if event.button() == QtCore.Qt.RightButton:  # undo last move
             self.undo_last_move()
+            if (not args.whuman) or (not args.bhuman):
+                self.undo_last_move() # undo twice if there is one or less human players.
+
         if event.button() == QtCore.Qt.MiddleButton:
             print(self.chessboard.__repr__())
 

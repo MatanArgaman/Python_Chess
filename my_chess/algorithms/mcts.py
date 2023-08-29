@@ -73,22 +73,15 @@ class MCTS_Node:
 
         # calculate nn best moves
         self.best_moves: List[chess.Move] = []
-        if MCTS_Node.use_nn is not None:
-            nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=3,
-                                                                    is_torch_nn=self.is_torch_nn,
-                                                                    device=self.device)
-            self.value = (nn_values.item() + 1) / 2.0  # move from [-1, 1] range to [0, 1] range
-            definitive_value = get_definitive_value(self.board)
-            if definitive_value is not None:
-                self.value = definitive_value
 
-            for m in nn_moves[0]:
-                try:
-                    m = chess.Move.from_uci(m)
-                except:  # may fail due to illegal move
-                    continue
-                if m in self.legal_moves:
-                    self.best_moves.append(m)
+        if MCTS_Node.use_nn is not None:
+            self.get_nn_moves()
+
+        if len(self.legal_moves) <= 1:
+            self.best_moves = list(self.legal_moves)
+        if not self.best_moves:
+            self.best_moves += [random.choice(list(self.legal_moves))]
+            LOG.warning("used a random move as the nn didn't provide a legal one")
 
         self.ordered_unexplored_moves: List[chess.Move] = self.best_moves
         if is_calc_all:
@@ -106,6 +99,27 @@ class MCTS_Node:
                     self.best_moves = [self.ordered_unexplored_moves[0]]
                 else:
                     self.best_moves = [list(self.legal_moves)[0]]
+
+    def get_nn_moves(self, k_best_moves=3):
+        nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=15,
+                                                                is_torch_nn=self.is_torch_nn,
+                                                                device=self.device)
+        self.value: float = (nn_values.item() + 1) / 2.0  # move from [-1, 1] range to [0, 1] range
+        definitive_value: Optional[float] = get_definitive_value(self.board)
+        if definitive_value is not None:
+            self.value = definitive_value
+
+        added_moves = 0
+        for m in nn_moves[0]:
+            try:
+                m = chess.Move.from_uci(m)
+            except:  # may fail due to illegal move
+                continue
+            if m in self.legal_moves:
+                self.best_moves.append(m)
+                added_moves += 1
+            if added_moves >= k_best_moves:
+                break
 
     def select(self) -> 'MCTS_Node':
         if self.ordered_unexplored_moves:
