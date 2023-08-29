@@ -29,7 +29,7 @@ class MCTS_Node:
     counter: int = 0
     use_nn: bool = False
 
-    def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=True,
+    def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=False,
                  nn_model=None, device: str = None, is_torch_nn: bool = False):
         MCTS_Node.counter += 1
         self.won: int = 0
@@ -74,7 +74,7 @@ class MCTS_Node:
         # calculate nn best moves
         self.best_moves: List[chess.Move] = []
         if MCTS_Node.use_nn is not None:
-            nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=10,
+            nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=3,
                                                                     is_torch_nn=self.is_torch_nn,
                                                                     device=self.device)
             self.value = (nn_values.item() + 1) / 2.0  # move from [-1, 1] range to [0, 1] range
@@ -159,7 +159,7 @@ class MCTS_Node:
         self.child_nodes.append(node)
         return node
 
-    def create_new_child(self, move: chess.Move, is_calc_all: bool = True) -> 'MCTS_Node':
+    def create_new_child(self, move: chess.Move, is_calc_all: bool = False) -> 'MCTS_Node':
         node = MCTS_Node(self.board, move=move, depth=self.depth + 1,
                          parent_node=self, is_calc_all=is_calc_all,
                          nn_model=self.nn_model, device=self.device,
@@ -232,7 +232,7 @@ def merge_trees(node1, node2):
 # mcts_process_num = multiprocessing.cpu_count() - 1
 
 
-def mcts_move(board, nn_model, device,  max_games=3500, k_best_moves=5):
+def mcts_move(board, nn_model, device, max_games=800, k_best_moves=2):
     root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
@@ -266,7 +266,7 @@ def mcts_move_helper(board, max_games, nn_model, device) -> MCTS_Node:
         selected_node: MCTS_Node = root.select()
 
         # backpropagation
-        reward = selected_node.value
+        reward = 1 - selected_node.value
         node = selected_node
         while node is not None:
             node.played += 1
@@ -287,8 +287,9 @@ def visualize_tree(node, depth=np.inf):
 
     def node_to_graph_node(node, dot):
         dot.node(str(node.counter),
-                 f'{round(node.won, 2)}/{node.played}\n{node.move}\n{node.counter}\n{round(node.calc_AMS(), 2)}',
-                 shape='box' if node.board.turn else 'oval', color='black' if node.board.turn else 'white')
+                 f'{round(node.won, 2)}/{node.played}\nm:{node.move}\n v:{round(node.value, 3)}\n'
+                 f'{node.counter}\nams:{round(node.calc_AMS(), 2)}',
+                 shape='box' if node.board.turn else 'oval', color='white' if node.board.turn else 'black')
 
     def helper(node, edges, dot, depth):
         if depth <= 0:
