@@ -79,7 +79,7 @@ class MCTS_Node:
 
         if len(self.legal_moves) <= 1:
             self.best_moves = list(self.legal_moves)
-        if not self.best_moves:
+        if not self.best_moves and self.legal_moves:
             self.best_moves += [random.choice(list(self.legal_moves))]
             LOG.warning("used a random move as the nn didn't provide a legal one")
 
