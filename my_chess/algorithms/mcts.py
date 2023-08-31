@@ -255,7 +255,7 @@ def merge_trees(node1, node2):
 # mcts_process_num = multiprocessing.cpu_count() - 1
 
 
-def mcts_move(board, nn_model, device, max_games=100, k_best_moves=2):
+def mcts_move(board, nn_model, device, max_games=800, k_best_moves=2):
     root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])

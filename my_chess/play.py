@@ -94,7 +94,7 @@ class MainWindow(QWidget):
                 if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
                                                                 chess.Piece.from_symbol('P')]:
                     end_position_row, _ = position_to_indices_2d(self.human_move[2:])
-                    if end_position_row in [0, ROW_SIZE-1]:
+                    if end_position_row in [0, ROW_SIZE - 1]:
                         print('enter promotion: q, r, b, n')
                         value = input()
                         if value in ['q', 'r', 'b', 'n']:
@@ -182,23 +182,26 @@ class MainWindow(QWidget):
             # save board image to file
             self.save_state()
 
-            if self.chessboard.is_checkmate():
-                if self.chessboard.turn:
-                    print('Black Wins')
-                else:
-                    print('White Wins')
-            if self.chessboard.is_insufficient_material():
-                print('Draw - insufficient material')
-            if self.chessboard.is_stalemate():
-                print('Draw - stalemate')
+            self.print_if_game_over()
 
         if event.button() == QtCore.Qt.RightButton:  # undo last move
             self.undo_last_move()
             if (not args.whuman) or (not args.bhuman):
-                self.undo_last_move() # undo twice if there is one or less human players.
+                self.undo_last_move()  # undo twice if there is one or less human players.
 
         if event.button() == QtCore.Qt.MiddleButton:
             print(self.chessboard.__repr__())
+
+    def print_if_game_over(self):
+        if self.chessboard.is_checkmate():
+            if self.chessboard.turn:
+                print('Black Wins')
+            else:
+                print('White Wins')
+        if self.chessboard.is_insufficient_material():
+            print('Draw - insufficient material')
+        if self.chessboard.is_stalemate():
+            print('Draw - stalemate')
 
     def undo_last_move(self):
         self.chessboard.pop()
@@ -248,6 +251,7 @@ class MainWindow(QWidget):
             self.widgetSvg.update()
         # save board image to file
         self.save_state()
+        self.print_if_game_over()
 
     def save_state(self):
         # save board as image
@@ -256,8 +260,6 @@ class MainWindow(QWidget):
         # save board as string
         with open(os.path.join(self.save_game_path, f'move_{self.board_move_counter}_fen.txt'), 'w') as fp:
             fp.write(str(self.chessboard.fen()))
-
-
 
 
 if __name__ == '__main__':
