@@ -146,6 +146,8 @@ def get_nn_moves_and_probabilities(board_list, model, k_best_moves=5, is_torch_n
         board_turn = board.turn
         if not board_turn:
             board = board.mirror()
+        else:
+            board = board.copy()
         board.halfmove_clock = 0
         board.fullmove_number = 0
         input_representation[i] = get_input_representation(board, 0)[np.newaxis]

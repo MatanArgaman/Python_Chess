@@ -202,6 +202,8 @@ class MainWindow(QWidget):
             print('Draw - insufficient material')
         if self.chessboard.is_stalemate():
             print('Draw - stalemate')
+        if self.chessboard.is_repetition():
+            print('Draw - by 3 repetition rule')
 
     def undo_last_move(self):
         self.chessboard.pop()

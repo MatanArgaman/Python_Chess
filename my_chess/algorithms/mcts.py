@@ -20,7 +20,7 @@ LOG = SingletonLogger().get_logger('play')
 def get_definitive_value(board: chess.Board) -> Optional[float]:
     if board.is_checkmate():
         return 0
-    if board.is_insufficient_material() or board.is_stalemate():
+    if board.is_insufficient_material() or board.is_stalemate() or board.is_repetition():
         return 0.5
     return None
 
@@ -117,7 +117,7 @@ class MCTS_Node:
             except chess.InvalidMoveError:  # may fail due to illegal move
                 pass
             try:
-                m2 = chess.Move.from_uci(m+'q')
+                m2 = chess.Move.from_uci(m + 'q')
             except chess.InvalidMoveError:  # may fail due to illegal move
                 pass
             if m1 or m2:
