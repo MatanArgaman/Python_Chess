@@ -95,6 +95,8 @@ def create_win_loss_stats(indices):
             board.halfmove_clock =0
             board.fullmove_number=0
             fen = board.fen()
+            if not fen.endswith("0"):
+                fen[-1]="0"
             mirror_move_dict = {}
             for m, s in move_dict.items():
                 mirror_move_dict[move_to_mirror_move(m)] = s
