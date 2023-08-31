@@ -111,15 +111,24 @@ class MCTS_Node:
 
         added_moves = 0
         for m in nn_moves[0]:
+            m1 = m2 = None
             try:
-                m = chess.Move.from_uci(m)
-            except:  # may fail due to illegal move
-                continue
-            if m in self.legal_moves:
-                self.best_moves.append(m)
-                added_moves += 1
-            if added_moves >= k_best_moves:
-                break
+                m1 = chess.Move.from_uci(m)
+            except chess.InvalidMoveError:  # may fail due to illegal move
+                pass
+            try:
+                m2 = chess.Move.from_uci(m+'q')
+            except chess.InvalidMoveError:  # may fail due to illegal move
+                pass
+            if m1 or m2:
+                if m1 in self.legal_moves:
+                    self.best_moves.append(m1)
+                    added_moves += 1
+                elif m2 in self.legal_moves:
+                    self.best_moves.append(m2)
+                    added_moves += 1
+                if added_moves >= k_best_moves:
+                    break
 
     def select(self) -> 'MCTS_Node':
         if self.ordered_unexplored_moves:
@@ -246,7 +255,7 @@ def merge_trees(node1, node2):
 # mcts_process_num = multiprocessing.cpu_count() - 1
 
 
-def mcts_move(board, nn_model, device, max_games=800, k_best_moves=2):
+def mcts_move(board, nn_model, device, max_games=100, k_best_moves=2):
     root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
