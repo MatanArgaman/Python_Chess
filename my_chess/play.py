@@ -77,8 +77,10 @@ class MainWindow(QWidget):
         # QTimer.singleShot(10, self.play)
 
     def is_flipped_graphics(self):
-        if (args.whuman and not args.bhuman) and args.flip_board:
-            return True
+        if args.whuman and not args.bhuman:
+            return args.flip_board
+        if args.bhuman and not args.whuman:
+            return not args.flip_board
         return False
 
     def update_graphics(self):
