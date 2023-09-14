@@ -17,6 +17,8 @@ from torch import nn
 
 # Constants
 ROW_SIZE = 8
+COL_LAST = 'h'
+COL_FIRST = 'a'
 StatValues = namedtuple("StatValues", ["Wins", "Draws", "Losses"])
 TOTAL_QUEEN_MOVES = 56
 TOTAL_KNIGHT_MOVES = 8
@@ -81,16 +83,19 @@ def indices_2d_to_index_1d(indices_2d):
     return indices_2d[0] * ROW_SIZE + indices_2d[1]
 
 
-def position_to_mirror_position(pos):
+def position_to_mirror_position(pos, flip_horizontally=False):
     col = pos[0]
+    if flip_horizontally:
+        col = str(chr(ord(COL_FIRST) + ord(COL_LAST) - ord(col)))
     row = ROW_SIZE - eval(pos[1]) + 1  # mirror row
     promotion = pos[2:]
     new_position = col + str(row) + promotion
     return new_position
 
 
-def move_to_mirror_move(m):
-    return position_to_mirror_position(m[:2]) + position_to_mirror_position(m[2:])
+def move_to_mirror_move(m, flip_horizontally = False):
+    return (position_to_mirror_position(m[:2], flip_horizontally=flip_horizontally) +
+            position_to_mirror_position(m[2:],flip_horizontally=flip_horizontally))
 
 
 def board_fen_to_hash(fen):

@@ -42,9 +42,8 @@ class MainWindow(QWidget):
             self.chessboard = chess.Board(args.board)
         else:
             self.chessboard = chess.Board()
-
-        self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-        self.widgetSvg.load(self.chessboardSvg)
+        self.chessboardSvg = None
+        self.update_graphics()
         self.widgetSvg.mousePressEvent = self.onclick
         self.human_first_click = True
         self.human_move = ''
@@ -77,6 +76,20 @@ class MainWindow(QWidget):
         # QTimer.singleShot(10, self.play)
         # QTimer.singleShot(10, self.play)
 
+    def is_flipped_graphics(self):
+        if args.whuman and not args.bhuman:
+            return True
+        return False
+
+    def update_graphics(self):
+        chessboard_graphics = self.chessboard
+        if self.is_flipped_graphics():
+            chessboard_graphics = self.chessboard.transform(chess.flip_vertical)
+            chessboard_graphics = chessboard_graphics.transform(chess.flip_horizontal)
+
+        self.chessboardSvg = chess.svg.board(chessboard_graphics).encode("UTF-8")
+        self.widgetSvg.load(self.chessboardSvg)
+
     def human_on_click(self, event):
 
         move = self.get_human_move(event)
@@ -90,6 +103,9 @@ class MainWindow(QWidget):
             self.human_move += move
             try:
                 move = None
+                if self.is_flipped_graphics():
+                    self.human_move = move_to_mirror_move(self.human_move, flip_horizontally=True)
+
                 start_position = position_to_index_1d(self.human_move[:2])
                 if self.chessboard.piece_at(start_position) in [chess.Piece.from_symbol('p'),
                                                                 chess.Piece.from_symbol('P')]:
@@ -207,16 +223,14 @@ class MainWindow(QWidget):
 
     def undo_last_move(self):
         self.chessboard.pop()
-        self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-        self.widgetSvg.load(self.chessboardSvg)
+        self.update_graphics()
         # self.widgetSvg.update()
         # time.sleep(1)
 
     def move(self, move: chess.Move):
         self.chessboard.push(move)
         self.board_move_counter += 1
-        self.chessboardSvg = chess.svg.board(self.chessboard).encode("UTF-8")
-        self.widgetSvg.load(self.chessboardSvg)
+        self.update_graphics()
 
     def get_human_move(self, event):
         SQUARE_START = 40
