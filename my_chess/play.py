@@ -77,7 +77,7 @@ class MainWindow(QWidget):
         # QTimer.singleShot(10, self.play)
 
     def is_flipped_graphics(self):
-        if args.whuman and not args.bhuman:
+        if (args.whuman and not args.bhuman) and args.flip_board:
             return True
         return False
 
@@ -172,6 +172,10 @@ class MainWindow(QWidget):
                 self.Log.warning('error while predicting move, skipping...')
         # if no legal move was generated use alpha beta to find one.
         return alpha_beta_move(self.chessboard)
+    def print_move(self, move, player='white'):
+        if self.is_flipped_graphics():
+            move = move_to_mirror_move(move, flip_horizontally=True)
+        print(f'{player}:', str(move))
 
     def onclick(self, event):
 
@@ -183,7 +187,7 @@ class MainWindow(QWidget):
                         return
                 else:
                     return
-                print('white:', str(move))
+                self.print_move(str(move), player='white')
             else:
                 if args.bhuman:
                     move = self.human_on_click(event)
@@ -191,7 +195,7 @@ class MainWindow(QWidget):
                         return
                 else:
                     return
-                print('black:', str(move))
+                self.print_move(str(move), player='black')
 
             self.move(move)
 
@@ -262,7 +266,7 @@ class MainWindow(QWidget):
             if not args.bhuman:
                 move = self.get_computer_move()
         if move is not None:
-            print(f"played: {move}")
+            self.print_move(str(move), player='black')
             self.move(move)
             self.widgetSvg.update()
         # save board image to file
@@ -280,8 +284,9 @@ class MainWindow(QWidget):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bhuman', action='store_true')
-    parser.add_argument('--whuman', action='store_true')
+    parser.add_argument('--bhuman', action='store_true', help='black human player')
+    parser.add_argument('--whuman', action='store_true', help='white human player')
+    parser.add_argument('--flip-board', action='store_true', help='flip the board')
     parser.add_argument('--database', action='store_true', help='get moves from database if available')
     parser.add_argument('--debug', action='store_true', help='sets logging level to debug')
     parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
