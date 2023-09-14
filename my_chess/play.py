@@ -268,7 +268,7 @@ class MainWindow(QWidget):
             if not args.bhuman:
                 move = self.get_computer_move()
         if move is not None:
-            self.print_move(str(move), player='black')
+            self.print_move(str(move), player='white' if self.chessboard.turn else 'black')
             self.move(move)
             self.widgetSvg.update()
         # save board image to file
