@@ -90,8 +90,10 @@ class MainWindow(QWidget):
             chessboard_graphics = chessboard_graphics.transform(chess.flip_horizontal)
 
         last_move = None
-        if self.chessboard != chess.Board():
+        try:
             last_move = self.chessboard.copy().pop()
+        except:
+            pass
         self.chessboardSvg = chess.svg.board(chessboard_graphics, lastmove=last_move).encode("UTF-8")
         self.widgetSvg.load(self.chessboardSvg)
 
