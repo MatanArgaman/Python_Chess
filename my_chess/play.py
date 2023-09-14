@@ -89,7 +89,10 @@ class MainWindow(QWidget):
             chessboard_graphics = self.chessboard.transform(chess.flip_vertical)
             chessboard_graphics = chessboard_graphics.transform(chess.flip_horizontal)
 
-        self.chessboardSvg = chess.svg.board(chessboard_graphics).encode("UTF-8")
+        last_move = None
+        if self.chessboard != chess.Board():
+            last_move = self.chessboard.copy().pop()
+        self.chessboardSvg = chess.svg.board(chessboard_graphics, lastmove=last_move).encode("UTF-8")
         self.widgetSvg.load(self.chessboardSvg)
 
     def human_on_click(self, event):
@@ -174,6 +177,7 @@ class MainWindow(QWidget):
                 self.Log.warning('error while predicting move, skipping...')
         # if no legal move was generated use alpha beta to find one.
         return alpha_beta_move(self.chessboard)
+
     def print_move(self, move, player='white'):
         if self.is_flipped_graphics():
             move = move_to_mirror_move(move, flip_horizontally=True)
@@ -228,10 +232,9 @@ class MainWindow(QWidget):
             print('Draw - by 3 repetition rule')
 
     def undo_last_move(self):
-        self.chessboard.pop()
-        self.update_graphics()
-        # self.widgetSvg.update()
-        # time.sleep(1)
+        if self.chessboard != chess.Board():
+            self.chessboard.pop()
+            self.update_graphics()
 
     def move(self, move: chess.Move):
         self.chessboard.push(move)
