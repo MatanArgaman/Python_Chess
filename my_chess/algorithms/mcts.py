@@ -301,16 +301,20 @@ def mcts_move_helper(board, max_games, nn_model, device) -> MCTS_Node:
     return root
 
 
-def visualize_tree(node, depth=np.inf):
+def visualize_tree(node, depth=np.inf, is_flipped=False):
     from graphviz import Digraph
+    from shared.shared_functionality import move_to_mirror_move
     dot = Digraph(comment='Graph', format='png')
     dot.graph_attr['bgcolor'] = 'cyan'
     dot.node_attr.update(style='filled', fontsize='15', fixedsize='false', fontcolor='blue')
     edges = []
 
     def node_to_graph_node(node, dot):
+        move = node.move
+        if is_flipped and move:
+            move = move_to_mirror_move(str(node.move), flip_horizontally=True)
         dot.node(str(node.counter),
-                 f'{round(node.won, 2)}/{node.played}\nm:{node.move}\n v:{round(node.value, 3)}\n'
+                 f'{round(node.won, 2)}/{node.played}({round((node.won / node.played), 2)})\nm:{move}\n v:{round(node.value, 3)}\n'
                  f'{node.counter}\nams:{round(node.calc_AMS(), 2)}',
                  shape='box' if node.board.turn else 'oval', color='white' if node.board.turn else 'black')
 
