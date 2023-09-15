@@ -92,6 +92,8 @@ class MainWindow(QWidget):
         last_move = None
         try:
             last_move = self.chessboard.copy().pop()
+            if self.is_flipped_graphics():
+                last_move = chess.Move.from_uci(move_to_mirror_move(str(last_move), flip_horizontally=True))
         except:
             pass
         self.chessboardSvg = chess.svg.board(chessboard_graphics, lastmove=last_move).encode("UTF-8")
