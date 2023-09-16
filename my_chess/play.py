@@ -270,10 +270,12 @@ class MainWindow(QWidget):
         move = None
         if self.chessboard.turn:
             if not args.whuman:
-                move = self.get_computer_move()
+                if not self.chessboard.is_game_over():
+                    move = self.get_computer_move()
         else:
             if not args.bhuman:
-                move = self.get_computer_move()
+                if not self.chessboard.is_game_over():
+                    move = self.get_computer_move()
         if move is not None:
             self.print_move(str(move), player='white' if self.chessboard.turn else 'black')
             self.move(move)
