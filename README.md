@@ -11,3 +11,6 @@ resnet architecture implemented as explained here(alphazero):
 masters chess, shogi and Go through self-play"
 
 https://discovery.ucl.ac.uk/id/eprint/10069050/
+
+standard run parameters to play against nn with mcts:
+--nn --mcts
