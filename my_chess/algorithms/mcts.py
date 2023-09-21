@@ -100,7 +100,7 @@ class MCTS_Node:
                 else:
                     self.best_moves = [list(self.legal_moves)[0]]
 
-    def get_nn_moves(self, k_best_moves=3):
+    def get_nn_moves(self, k_best_moves=5):
         nn_moves, _, nn_values = get_nn_moves_and_probabilities([self.board], self.nn_model, k_best_moves=15,
                                                                 is_torch_nn=self.is_torch_nn,
                                                                 device=self.device)
@@ -255,7 +255,7 @@ def merge_trees(node1, node2):
 # mcts_process_num = multiprocessing.cpu_count() - 1
 
 
-def mcts_move(board, nn_model, device, max_games=800, k_best_moves=2):
+def mcts_move(board, nn_model, device, max_games=1200, k_best_moves=2):
     root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
     sorted_nodes = sorted(best_nodes, key=lambda x: x[1])
