@@ -11,6 +11,7 @@ resnet architecture implemented as explained here(alphazero):
 masters chess, shogi and Go through self-play"
 
 https://discovery.ucl.ac.uk/id/eprint/10069050/
+https://discovery.ucl.ac.uk/id/eprint/10069050/1/alphazero_preprint.pdf
 
 <b><u>Playing</u></b>
 
