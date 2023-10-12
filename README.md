@@ -29,3 +29,10 @@ run play.py, standard run parameters to play against nn with mcts as white:
 standard run parameters to play against nn with mcts as black:
 --nn --mcts --bhuman
 
+When playing your games are automatically saved to the my_chess/games folder, both an image of the board and its fen
+are saved each turn.
+
+You can resume a game from the saved fens by adding these parameters:
+-board  "<your-fen>"
+e.g:
+-board  "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"
