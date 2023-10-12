@@ -1,4 +1,5 @@
 
+![alt text](https://media.licdn.com/dms/image/sync/D4D27AQGlB1bsrSDJbQ/articleshare-shrink_800/0/1697123995922?e=1697731200&v=beta&t=WI0w5sSiM9IIbFGFJMpDs5q-fhLThIDm2Ev0bEWmn_s)
 
 Expert chess games taken from:
 http://caissabase.co.uk/
@@ -20,6 +21,9 @@ install requirements.txt file.
 
 Download the nn weights:<br>
 https://drive.google.com/drive/folders/1iMF6H7JiasNJ-Db5j5LJPgaV3tOIJ-n-?usp=sharing
+
+The elo ranking is currently ~2000 - tested against stockfish at https://chessui.com/.
+
 <br>Set config.json "torch_nn_path" to the backbone .pth weights path (largest file).
 Make sure the heads weights (_policy_network.pth, _value_network.pth)
 are also in the same folder.
