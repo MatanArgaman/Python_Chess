@@ -18,7 +18,9 @@ install requirements.txt file.
 
 <b><u>Playing</u></b>
 
-Set config.json "torch_nn_path" to the backbone .pth weights path.
+Download the nn weights:
+https://drive.google.com/drive/folders/1iMF6H7JiasNJ-Db5j5LJPgaV3tOIJ-n-?usp=sharing
+Set config.json "torch_nn_path" to the backbone .pth weights path (largest file).
 Make sure the heads weights (_policy_network.pth, _value_network.pth)
 are also in the same folder.
 
