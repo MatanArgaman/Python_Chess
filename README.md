@@ -25,7 +25,7 @@ https://drive.google.com/drive/folders/1iMF6H7JiasNJ-Db5j5LJPgaV3tOIJ-n-?usp=sha
 The elo ranking is currently ~2000 - tested against stockfish at https://chessui.com/.
 
 <br>Set config.json "torch_nn_path" to the backbone .pth weights path (largest file).
-Make sure the heads weights (_policy_network.pth, _value_network.pth)
+Make sure the heads' weights (_policy_network.pth, _value_network.pth)
 are also in the same folder.
 
 run play.py, standard run parameters to play against nn with mcts as white:<br>
