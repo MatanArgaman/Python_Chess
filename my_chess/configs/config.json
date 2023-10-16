@@ -6,19 +6,13 @@
         "file_name": "dstat"
         },
         "network_type": "torch",
-        "torch_nn_path": "/home/matan/data/mydata/chess/caissabase/pgn/models/alpha_chess/2023_08_11___02_19_26/model_alpha_11_08_2023_exp1_epoch_1_acc_0.3343.pth",
+        "torch_nn_path": "/home/matan/models/2023_08_25___09_51_25/model_alpha_11_08_2023_exp1_epoch_9_acc_0.5752.pth",
         "tf_nn_path": "/home/matan/data/mydata/chess/caissabase/nn/mymodel1"
     },
 
     "train": {
         "input_output_files_path": "/home/matan/data/mydata/chess/caissabase/pgn/estat_100",
         "input_output_files_filename": "estat",
-        "tensorflow": {
-            "test_index1": 9,
-            "nn_model_function": "policy3",
-            "nn_evaluation_filename": "eval.json",
-            "rounds_between_eval": 50
-        },
 
         "torch":
         {
