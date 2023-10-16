@@ -1,17 +1,12 @@
-import heapq
 import random
 import time
-from multiprocessing import Pool
-
 import chess
 import numpy as np
 import tqdm
-from typing import List, Optional
 import torch
+from typing import List, Optional
 
-from predict import get_input_representation
-from shared.shared_functionality import get_nn_moves_and_probabilities, load_pytorch_model, SingletonLogger, \
-    load_tensorflow_model
+from shared.shared_functionality import get_nn_moves_and_probabilities, SingletonLogger
 from nn.pytorch_nn.AlphaChess.utils import create_alpha_chess_model, load_model
 
 LOG = SingletonLogger().get_logger('play')
@@ -27,7 +22,6 @@ def get_definitive_value(board: chess.Board) -> Optional[float]:
 
 class MCTS_Node:
     counter: int = 0
-    use_nn: bool = False
 
     def __init__(self, board, move=None, depth=0, parent_node=None, is_calc_all=False,
                  nn_model=None, device: str = None, is_torch_nn: bool = False):
@@ -47,35 +41,10 @@ class MCTS_Node:
         self.child_nodes: List[MCTS_Node] = []
         self.legal_moves: set = set(self.board.legal_moves)
 
-        if is_calc_all:
-            # calculate capturing moves
-            self.capturing_moves: List[chess.Move] = []
-            start_pos_dict: dict = {}
-
-            for i, m in enumerate(self.legal_moves):
-                move_str = str(m)
-                start_pos = move_str[:2]
-                start_pos_dict[start_pos] = start_pos_dict.get(start_pos, []) + [m]
-                if self.board.is_capture(m):
-                    self.capturing_moves.append(m)
-
-            # calculate avoidance moves
-            self.avoidance_moves: List[chess.Move] = []
-
-            self.board.turn = not self.board.turn
-            # self.board.legal_moves here is not identical to self.legal_moves as the turn was changed.
-            for i, m in enumerate(self.board.legal_moves):
-                if self.board.is_capture(m):
-                    start_pos = str(m)[2:4]
-                    self.avoidance_moves += start_pos_dict.get(start_pos, [])
-            self.board.turn = not self.board.turn
-            self.avoidance_moves = list(set(self.avoidance_moves))
-
         # calculate nn best moves
         self.best_moves: List[chess.Move] = []
 
-        if MCTS_Node.use_nn is not None:
-            self.get_nn_moves()
+        self.get_nn_moves()
 
         if len(self.legal_moves) <= 1:
             self.best_moves = list(self.legal_moves)
@@ -84,14 +53,6 @@ class MCTS_Node:
             LOG.warning("used a random move as the nn didn't provide a legal one")
 
         self.ordered_unexplored_moves: List[chess.Move] = self.best_moves
-        if is_calc_all:
-            # create a list of all moves to be considered in the mcts
-            best_moves_set = set(self.best_moves)
-            self.ordered_unexplored_moves += list(set(self.avoidance_moves).difference(best_moves_set))
-            self.ordered_unexplored_moves += list(set(self.capturing_moves).difference(best_moves_set))
-            additional_moves = list(self.legal_moves.difference(self.ordered_unexplored_moves))
-            if additional_moves:
-                self.ordered_unexplored_moves += [random.choice(additional_moves)]
 
         if not self.best_moves:  # heuristic which shouldn't occur. todo: check how can all nn_moves not be legal.
             if not self.board.is_game_over():
@@ -192,69 +153,6 @@ class MCTS_Node:
     def get_nn_best_move(self) -> chess.Move:
         return self.best_moves[0]
 
-
-def basic_evaluation(board):
-    if board.is_checkmate():
-        if board.turn:
-            return np.inf
-        else:
-            return -np.inf
-    if board.is_insufficient_material():
-        return 0
-    if board.is_stalemate():
-        return 0
-
-    score = get_material_score(board)
-    return score
-
-
-class Node:
-    counter = 0
-
-    def __init__(self, board, alpha, beta, parent, move=None):
-        Node.counter += 1
-        if Node.counter % 1000 == 0:
-            print(Node.counter)
-        self.alpha = alpha
-        self.beta = beta
-        self.move = move
-        self.board = board.copy()
-        if move is not None:
-            self.board.push(self.move)
-        self.child_nodes = []
-        self.parent = parent
-
-    @staticmethod
-    def reset_counter():
-        Node.counter = 0
-
-
-def merge_trees(node1, node2):
-    node_map = dict([(n.move, n) for n in node1.child_nodes])
-    for n in node2.child_nodes:
-        if n.move in node_map:
-            node_map[n.move].played += n.played
-            node_map[n.move].won += n.won
-            # merge_trees(node_map[n.move], n)
-        else:
-            move_index = node1.legal_moves.index(n.move)
-            node1.child_nodes.append(n)
-            node1.explored_moves.add(move_index)
-            n.parent_node = node1
-            n.update_parent_heap()
-
-
-# # debugging script to show game moves according to tree
-# b = board.copy()
-# for m in game_moves:
-#     print(str(m))
-#     print(b)
-#     print('\n')
-#     b.push(m)
-
-# mcts_process_num = multiprocessing.cpu_count() - 1
-
-
 def mcts_move(board, nn_model, device, max_games=1200, k_best_moves=2):
     root = mcts_move_helper(board, max_games, nn_model, device)
     best_nodes = [(n, n.win_percentage()) for n in root.child_nodes]
@@ -266,15 +164,11 @@ def mcts_move(board, nn_model, device, max_games=1200, k_best_moves=2):
     return moves
 
 
-def get_nn_and_device(is_torch_nn, config):
-    if is_torch_nn:
-        import torch
+def get_nn_and_device(config):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         model = create_alpha_chess_model(device, True, True, True)
         load_model(model, config['play']['torch_nn_path'], config)
         return device, model
-    else:
-        return load_tensorflow_model(config)
 
 
 def mcts_move_helper(board, max_games, nn_model, device) -> MCTS_Node:
@@ -331,46 +225,3 @@ def visualize_tree(node, depth=np.inf, is_flipped=False):
     dot.edges(edges)
     print(dot.source)
     dot.render('test-output/round-table.gv', view=True)
-
-
-def is_game_over(board):
-    if board.is_checkmate() or board.is_insufficient_material() or board.is_stalemate():
-        return True
-    return False
-
-
-def get_material_reward(board, start_turn_is_white, start_material_score):
-    material_score = get_material_score(board) - start_material_score
-
-    if start_turn_is_white:
-        if material_score > 0:
-            reward = 0.6
-        elif material_score < 0:
-            reward = 0.4
-        else:
-            reward = 0.5
-    else:
-        if material_score > 0:
-            reward = 0.4
-        elif material_score < 0:
-            reward = 0.6
-        else:
-            reward = 0.5
-    return reward
-
-
-def get_material_score(board):
-    wp = len(board.pieces(chess.PAWN, chess.WHITE))
-    wr = len(board.pieces(chess.ROOK, chess.WHITE))
-    wb = len(board.pieces(chess.BISHOP, chess.WHITE))
-    wk = len(board.pieces(chess.KNIGHT, chess.WHITE))
-    wq = len(board.pieces(chess.QUEEN, chess.WHITE))
-
-    bp = len(board.pieces(chess.PAWN, chess.BLACK))
-    br = len(board.pieces(chess.ROOK, chess.BLACK))
-    bb = len(board.pieces(chess.BISHOP, chess.BLACK))
-    bk = len(board.pieces(chess.KNIGHT, chess.BLACK))
-    bq = len(board.pieces(chess.QUEEN, chess.BLACK))
-
-    material_score = (wp - bp) + (wr - br) * 5 + (wb - bb) * 4 + (wk - bk) * 3 + (wq - bq) * 9
-    return material_score

@@ -266,15 +266,6 @@ class SingletonLogger():
         return logger
 
 
-def load_tensorflow_model(config):
-    import tensorflow as tf
-    from tensorflow import keras
-    physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(
-        physical_devices[0], True
-    )
-    return keras.models.load_model(config['train']['nn_model_path'])
-
 
 def load_pytorch_model(config):
     import torch

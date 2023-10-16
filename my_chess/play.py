@@ -1,19 +1,13 @@
-import os
 import chess.svg
-import time
 import argparse
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtWidgets import QApplication, QWidget
 from PyQt5 import QtCore
-import json
 from datetime import datetime
-from PyQt5.QtCore import QTimer, QThread, QObject, pyqtSignal
+from PyQt5.QtCore import QTimer, QObject, pyqtSignal
 
-import nn.pytorch_nn.AlphaChess.utils
-from algorithms.alpha_beta import alpha_beta_move
-from algorithms.mcts import MCTS_Node, mcts_move, get_nn_and_device
+from algorithms.mcts import mcts_move, get_nn_and_device
 from shared.shared_functionality import *
-from shared.shared_functionality import get_nn_moves_and_probabilities
 
 
 class Worker(QObject):
@@ -42,6 +36,7 @@ class MainWindow(QWidget):
             self.chessboard = chess.Board(args.board)
         else:
             self.chessboard = chess.Board()
+        self.start_board = self.chessboard.copy()
         self.chessboardSvg = None
         self.update_graphics()
         self.widgetSvg.mousePressEvent = self.onclick
@@ -56,25 +51,17 @@ class MainWindow(QWidget):
         with open(get_config_path(), 'r') as f:
             self.config = json.load(f)
         self._is_torch_nn = self.config['play']['network_type'] == 'torch'
-        self.use_nn = args.nn
         self.use_database = args.database
-        self.use_mcts = args.mcts
 
         self.save_game_path = os.path.join(os.getcwd(), "games",
                                            'game_' + datetime.now().strftime("%d_%m_%Y___%H_%M_%S"))
         self.board_move_counter = 0
         os.makedirs(self.save_game_path)
 
-        # self.thread = QThread()
-        # self.worker = Worker(self)
-        # self.thread.started.connect(self.worker.run)
-        # self.thread.start()
         self.timer = QTimer()
         self.timer.timeout.connect(self.play)
         self.timer.start(1000)
 
-        # QTimer.singleShot(10, self.play)
-        # QTimer.singleShot(10, self.play)
 
     def is_flipped_graphics(self):
         if args.whuman and not args.bhuman:
@@ -101,15 +88,15 @@ class MainWindow(QWidget):
 
     def human_on_click(self, event):
 
-        move = self.get_human_move(event)
-        if move is None:
+        square = self.human_click_to_square(event)
+        if square is None:
             return None
         if self.human_first_click:
             self.human_first_click = False
-            self.human_move = move
+            self.human_move = square
         else:
             self.human_first_click = True
-            self.human_move += move
+            self.human_move += square
             try:
                 move = None
                 if self.is_flipped_graphics():
@@ -129,6 +116,8 @@ class MainWindow(QWidget):
                 if move in self.chessboard.legal_moves:
                     # check for pawn to last row move and prompt player for type of piece conversion wanted
                     return move
+                self.human_first_click = False
+                self.human_move = square
             except:
                 pass
         return None
@@ -150,37 +139,14 @@ class MainWindow(QWidget):
 
                 index = np.searchsorted(probabilities.cumsum(), np.random.rand(), side='left')
                 return chess.Move.from_uci(moves[index])
-            except:
-                self.Log
-        if self.use_mcts:
-            if self.nn_model is None:
-                self.device, self.nn_model = get_nn_and_device(True, self.config)
-            MCTS_Node.use_nn = self.use_nn
-            move = mcts_move(self.chessboard, self.nn_model, self.device)[0]
-            return move
-        if self.use_nn:
-            try:
-                if self.nn_model is None:
-                    if self._is_torch_nn:
-                        self.device, self.nn_model = load_pytorch_model(self.config)
-                    elif self.config['play']['network_type'] == 'tensorflow':
-                        from tensorflow import keras
-                        self.nn_model = nn.pytorch_nn.AlphaChess.utils.load_model(self.config['play']['tf_nn_path'])
-                # returns the best k moves
-                moves, probabilities = get_nn_moves_and_probabilities([self.chessboard.copy()],
-                                                                      self.nn_model,
-                                                                      is_torch_nn=self._is_torch_nn, device=self.device)
-                moves = moves[0]  # used batch size 1 so there is only a single array of returned moves.
-                probabilities = probabilities[0]
-                self.Log.debug(f'moves      : {list(moves)}')
-                self.Log.debug(f'probability: {list(probabilities)}')
-                for m in moves:
-                    if chess.Move.from_uci(m) in self.chessboard.legal_moves:
-                        return chess.Move.from_uci(m)
-            except:
-                self.Log.warning('error while predicting move, skipping...')
-        # if no legal move was generated use alpha beta to find one.
-        return alpha_beta_move(self.chessboard)
+            except Exception as e:
+                self.Log.error("error when using database", str(e))
+
+        if self.nn_model is None:
+            self.device, self.nn_model = get_nn_and_device(self.config)
+        move = mcts_move(self.chessboard, self.nn_model, self.device)[0]
+        return move
+
 
     def print_move(self, move, player='white'):
         if self.is_flipped_graphics():
@@ -236,7 +202,7 @@ class MainWindow(QWidget):
             print('Draw - by 3 repetition rule')
 
     def undo_last_move(self):
-        if self.chessboard != chess.Board():
+        if self.chessboard != self.start_board:
             self.chessboard.pop()
             self.update_graphics()
 
@@ -245,7 +211,7 @@ class MainWindow(QWidget):
         self.board_move_counter += 1
         self.update_graphics()
 
-    def get_human_move(self, event):
+    def human_click_to_square(self, event):
         SQUARE_START = 40
         SQUARE_SIZE = 115
         SQUARES_PER_ROW_COLUMN = 8
@@ -300,8 +266,6 @@ if __name__ == '__main__':
     parser.add_argument('--flip-board', action='store_true', help='flip the board')
     parser.add_argument('--database', action='store_true', help='get moves from database if available')
     parser.add_argument('--debug', action='store_true', help='sets logging level to debug')
-    parser.add_argument('--nn', action='store_true', help='get moves from neural network predictions')
-    parser.add_argument('--mcts', action='store_true', help='get moves from monte carlo tree search')
     parser.add_argument('-board', help='start from predefined board (fen), e.g: "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"')
 
     args = parser.parse_args()

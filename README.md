@@ -29,9 +29,9 @@ Make sure the heads' weights (_policy_network.pth, _value_network.pth)
 are also in the same folder.
 
 run play.py, standard run parameters to play against nn with mcts as white:<br>
---nn --mcts --whuman<br>
+--whuman<br>
 standard run parameters to play against nn with mcts as black:<br>
---nn --mcts --bhuman<br>
+--bhuman<br>
 
 When playing your games are automatically saved to the my_chess/games folder, both an image of the board and its fen
 are saved each turn.
@@ -40,3 +40,8 @@ You can resume a game from the saved fens by adding these parameters:<br>
 -board  "&lt;your-fen&gt;"<br>
 e.g:
 -board  "8/4Q3/8/7k/5K2/8/8/8 w - - 0 1"
+
+
+<br>You can undo your move by clicking the right mouse button. 
+<br>Note that when playing against a player this will undo a the last move only but when
+playing against the AI it will undo both the player's last move and the AI's.

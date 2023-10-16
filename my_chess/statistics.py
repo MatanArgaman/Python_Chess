@@ -3,8 +3,6 @@ import chess.pgn
 import os
 import pickle
 
-from shared.shared_functionality import StatValues
-
 
 def create_new_player_stats(stats, player):
     if player in stats:
