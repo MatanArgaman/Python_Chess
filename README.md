@@ -1,5 +1,9 @@
+AlphaGo for Chess is a chess AI agent following the ideas in the AlphaGo Zero article.
+The work resulted in an agent with ~2000 elo rating and was tested against stockfish (strongest available open source AI) manually.
 
-![alt text](https://media.licdn.com/dms/image/sync/D4D27AQGlB1bsrSDJbQ/articleshare-shrink_800/0/1697123995922?e=1697731200&v=beta&t=WI0w5sSiM9IIbFGFJMpDs5q-fhLThIDm2Ev0bEWmn_s)
+check out my blost explaining the work in detail here:
+
+https://wordpress.com/post/matanargaman.wordpress.com/191
 
 Expert chess games taken from:
 http://caissabase.co.uk/
