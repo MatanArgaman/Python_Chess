@@ -1,7 +1,7 @@
 <h1><center>AlphaGo for Chess</center></h1>
 <img src="https://repository-images.githubusercontent.com/330721108/4e6591b3-851e-4658-aa95-43eb8054a519" alt="AlphaGo for Chess">
 <br>
-<h4>AlphaGo for Chess is a chess AI agent that implements a deep neural network with the the combination of the MCTS algorithm. <br><br> This work follows the main ideas in the AlphaGo Zero article.<br><br>
+<h4>AlphaGo for Chess is a chess AI agent that implements a deep neural network with the combination of the MCTS algorithm. <br><br> This work follows the main ideas in the AlphaGo Zero article.<br><br>
 The work resulted in an agent with ~2000 elo rating and was tested against stockfish (strongest available open source AI) manually.
 </h4>
 <br><br>
