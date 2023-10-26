@@ -1,10 +1,15 @@
+<h1><center>AlphaGo for Chess</center></h1>
 <img src="https://repository-images.githubusercontent.com/330721108/4e6591b3-851e-4658-aa95-43eb8054a519" alt="AlphaGo for Chess">
-
-AlphaGo for Chess is a chess AI agent following the ideas in the AlphaGo Zero article.
-The work resulted in an agent with ~2000 elo rating and was tested against stockfish (strongest available open source AI) manually.
 <br>
-<b>Check out my blog explaining the work in detail here</b>: https://wordpress.com/post/matanargaman.wordpress.com/191
+AlphaGo for Chess is a chess AI agent following the ideas in the AlphaGo Zero article.<br>
+The work resulted in an agent with ~2000 elo rating and was tested against stockfish (strongest available open source AI) manually.
 <br><br>
+<b><h3>
+Check out my blog explaining the work in detail  
+<a href="https://wordpress.com/post/matanargaman.wordpress.com/191">here</a>
+
+</h3></b>
+<br><br><br>
 Expert chess games taken from: http://caissabase.co.uk/
 
 Representation implemented according to alphazero article.
